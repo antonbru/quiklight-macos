@@ -16,6 +16,24 @@
 - автопереподключение: при отключении/подключении панели приложение
   продолжает работать.
 
+## Иконки
+
+App icon — мастер 1024×1024 (`assets/icons/AppIcon-1024.png`, из него
+`build_app.sh` собирает `AppIcon.icns`):
+
+![App icon](assets/icons/preview-appicon.png)
+
+Все варианты генерации (выбран «парящий» монитор с усиленным свечением —
+`v1-final`; внизу мини-копии 96/48/32 px):
+
+![Варианты app icon](assets/icons/collage-small.jpg)
+
+Иконка в menu bar — template-изображение (чёрный + альфа): macOS сама
+перекрашивает её под светлую и тёмную тему:
+
+![Menu bar icon, светлое меню](assets/icons/preview-menubar-white.png)
+![Menu bar icon, тёмное меню](assets/icons/preview-menubar-dark.png)
+
 ## Железо
 
 | | |
@@ -94,7 +112,7 @@ crates/
 ├── quiklight-core/   # протокол RB/SC, HID-транспорт, захват экрана, цвет
 ├── quiklight-app/    # menu bar приложение (AppKit через objc2)
 └── hidprobe/         # CLI-проверка железа (фаза 0)
-assets/icons/         # иконки: AppIcon-1024.png (мастер) + template-наборы меню-бара
+assets/icons/         # иконки: AppIcon-1024.png (мастер) + template-наборы меню-бара + превью для README
 scripts/build_app.sh  # сборка .app-бандла (+ ad-hoc подпись)
 docs/                 # PROTOCOL.md, REFERENCES.md, ICON_TZ.md
 ```
