@@ -1,0 +1,18 @@
+[package]
+name = "quiklight-app"
+version.workspace = true
+edition.workspace = true
+description = "Menu bar приложение QuikLight: статичный цвет, эффекты, screen sync"
+
+[[bin]]
+name = "quiklight-app"
+path = "src/main.rs"
+
+[dependencies]
+quiklight-core = { path = "../quiklight-core" }
+hidapi = "2"
+block2 = "0.6"
+objc2 = "0.6"
+objc2-app-kit = "0.3"
+objc2-core-foundation = { version = "0.3", features = ["CFCGTypes"] }
+objc2-foundation = { version = "0.3", features = ["NSString", "NSTimer", "NSGeometry"] }
