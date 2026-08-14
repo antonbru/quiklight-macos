@@ -418,3 +418,53 @@ fn sync_step(state: &mut State, events_tx: &Sender<WorkerEvent>) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quiklight_core::sync::led_mapper::EdgeLayout;
+
+    #[test]
+    fn led_count_auto_falls_back_to_device() {
+        let s = Settings::default(); // led_count = 0 → авто
+        assert_eq!(s.led_count_effective(Some(51)), 51);
+        assert_eq!(s.led_count_effective(None), 63); // запасной
+        assert_eq!(s.led_count_effective(Some(0)), 63);
+    }
+
+    #[test]
+    fn led_count_manual_wins() {
+        let mut s = Settings::default();
+        s.led_count = 100;
+        assert_eq!(s.led_count_effective(Some(51)), 100);
+    }
+
+    #[test]
+    fn layout_auto_uses_device_led() {
+        let s = Settings::default();
+        let l = s.layout_effective(Some(63));
+        assert_eq!((l.left, l.top, l.right, l.bottom), (17, 29, 17, 0));
+        let l51 = s.layout_effective(Some(51));
+        assert_eq!(l51.total(), 51);
+    }
+
+    #[test]
+    fn layout_manual_wins() {
+        let mut s = Settings::default();
+        s.layout = EdgeLayout { left: 5, top: 10, right: 5, bottom: 0 };
+        assert_eq!(s.layout_effective(Some(51)).total(), 20);
+    }
+
+    #[test]
+    fn frame_interval_clamped() {
+        let mut s = Settings::default();
+        s.fps = 30;
+        assert_eq!(s.frame_interval_ms(), 33);
+        s.fps = 60;
+        assert_eq!(s.frame_interval_ms(), 16);
+        s.fps = 5; // ниже минимума → 20 fps → 50 мс
+        assert_eq!(s.frame_interval_ms(), 50);
+        s.fps = 200; // выше максимума → 60 fps → 16 мс
+        assert_eq!(s.frame_interval_ms(), 16);
+    }
+}
