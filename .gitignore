@@ -1,0 +1,15 @@
+# Rust / Cargo
+/target
+**/*.rs.bk
+
+# macOS
+.DS_Store
+
+# Сборка .app
+*.app
+*.dmg
+*.zip
+
+# IDE
+.idea/
+.vscode/
