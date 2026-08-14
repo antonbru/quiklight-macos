@@ -5,7 +5,7 @@
 //! Поток не трогает AppKit: только HID + ScreenCaptureKit + чистая логика.
 
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use hidapi::HidApi;
 use quiklight_core::hid::device::{Device, DeviceError};
@@ -151,6 +151,8 @@ struct State {
     device: Option<Device>,
     /// Число LED, прочитанное с устройства (для авто-режима настроек).
     device_led: Option<u16>,
+    /// Момент, раньше которого не пытаемся переподключиться (анти-спам 1 р/с).
+    reconnect_at: Instant,
     capturer: Option<ScreenCapturer>,
     extractor: ColorExtractor,
     /// Ошибка screen sync уже показана пользователю (не спамить).
@@ -166,6 +168,7 @@ fn run(cmd_rx: Receiver<Command>, events_tx: Sender<WorkerEvent>) {
         color: (255, 255, 255),
         device: None,
         device_led: None,
+        reconnect_at: Instant::now(),
         capturer: None,
         extractor: ColorExtractor::new(Settings::default().postprocess()),
         sync_error_reported: false,
@@ -215,7 +218,7 @@ fn handle_command(state: &mut State, cmd: Command, events_tx: &Sender<WorkerEven
         Command::SetPower(on) => {
             state.power = on;
             if on {
-                apply_mode(state);
+                apply_mode(state, events_tx);
             } else {
                 turn_off_and_report(state, events_tx);
             }
@@ -223,22 +226,24 @@ fn handle_command(state: &mut State, cmd: Command, events_tx: &Sender<WorkerEven
         Command::SetMode(mode) => {
             state.mode = mode;
             if state.power {
-                apply_mode(state);
+                apply_mode(state, events_tx);
             }
             let _ = events_tx.send(WorkerEvent::ModeChanged(mode));
         }
         Command::SetColor { r, g, b } => {
             state.color = (r, g, b);
             if state.power && state.mode == Mode::Static {
-                apply_static(state);
+                apply_static(state, events_tx);
             }
         }
         Command::SetBrightness(v) => {
             state.brightness = v.min(100);
             let brightness = state.brightness;
-            if let Some(device) = device_or_reconnect(state) {
+            if let Some(device) = device_or_reconnect(state, events_tx) {
                 let id = device.next_session_id();
-                let _ = device.write_with_response(&set_brightness(id, brightness));
+                if let Err(e) = device.write_with_response(&set_brightness(id, brightness)) {
+                    device_lost(state, events_tx, &e);
+                }
             }
         }
         Command::SetSettings(s) => {
@@ -255,15 +260,17 @@ fn handle_command(state: &mut State, cmd: Command, events_tx: &Sender<WorkerEven
 }
 
 /// Применить текущий режим к устройству.
-fn apply_mode(state: &mut State) {
+fn apply_mode(state: &mut State, events_tx: &Sender<WorkerEvent>) {
     match state.mode {
         Mode::Off => {}
-        Mode::Static => apply_static(state),
+        Mode::Static => apply_static(state, events_tx),
         Mode::Effects(tipo, index) => {
-            if let Some(device) = device_or_reconnect(state) {
+            if let Some(device) = device_or_reconnect(state, events_tx) {
                 let id = device.next_session_id();
                 let frame = set_led_effect(id, tipo, index);
-                let _ = device.write_with_response(&frame);
+                if let Err(e) = device.write_with_response(&frame) {
+                    device_lost(state, events_tx, &e);
+                }
             }
         }
         Mode::Sync => {
@@ -272,12 +279,14 @@ fn apply_mode(state: &mut State) {
     }
 }
 
-fn apply_static(state: &mut State) {
+fn apply_static(state: &mut State, events_tx: &Sender<WorkerEvent>) {
     let (r, g, b) = state.color;
-    if let Some(device) = device_or_reconnect(state) {
+    if let Some(device) = device_or_reconnect(state, events_tx) {
         let id = device.next_session_id();
         let frame = set_section_led(id, &[(1, r, g, b, LED_END)]);
-        let _ = device.write_frame(&frame);
+        if let Err(e) = device.write_frame(&frame) {
+            device_lost(state, events_tx, &e);
+        }
     }
 }
 
@@ -302,21 +311,39 @@ fn turn_off_and_report(state: &mut State, events_tx: &Sender<WorkerEvent>) {
     }
 }
 
-/// Открыть устройство, если ещё не открыто; при ошибке — сообщить в UI.
-fn device_or_reconnect(state: &mut State) -> Option<&mut Device> {
+/// Открыть устройство, если ещё не открыто; при успешном переподключении
+/// сообщить в UI (анти-спам: попытки не чаще раза в секунду).
+fn device_or_reconnect<'a>(
+    state: &'a mut State,
+    events_tx: &Sender<WorkerEvent>,
+) -> Option<&'a mut Device> {
     if state.device.is_none() {
+        if Instant::now() < state.reconnect_at {
+            return None;
+        }
+        state.reconnect_at = Instant::now() + Duration::from_secs(1);
         let api = HidApi::new().ok()?;
         match Device::open_first(&api) {
-            Ok(device) => state.device = Some(device),
+            Ok(device) => {
+                state.device = Some(device);
+                let _ = events_tx.send(WorkerEvent::DeviceChanged { connected: true, info: None });
+            }
             Err(_) => return None,
         }
     }
     state.device.as_mut()
 }
 
+/// Устройство перестало отвечать: закрыть дескриптор и сообщить в UI.
+fn device_lost(state: &mut State, events_tx: &Sender<WorkerEvent>, error: &DeviceError) {
+    state.device = None;
+    let _ = events_tx.send(WorkerEvent::DeviceChanged { connected: false, info: None });
+    let _ = events_tx.send(WorkerEvent::Error(format!("Устройство отключилось: {error}")));
+}
+
 /// Прочитать информацию об устройстве и сообщить о подключении.
 fn report_device(state: &mut State, events_tx: &Sender<WorkerEvent>) {
-    match device_or_reconnect(state) {
+    match device_or_reconnect(state, events_tx) {
         Some(device) => {
             let id = device.next_session_id();
             let info = device
@@ -379,9 +406,11 @@ fn sync_step(state: &mut State, events_tx: &Sender<WorkerEvent>) {
         payload.extend_from_slice(&[r, g, b]);
     }
 
-    if let Some(device) = device_or_reconnect(state) {
+    if let Some(device) = device_or_reconnect(state, events_tx) {
         let id = device.next_session_id();
         let sc = sc_frame(id, 0x80, &payload).with_checksum();
-        let _ = device.write_frame(&sc);
+        if let Err(e) = device.write_frame(&sc) {
+            device_lost(state, events_tx, &e);
+        }
     }
 }
