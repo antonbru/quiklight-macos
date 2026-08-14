@@ -62,6 +62,16 @@ cargo run -p hidprobe -- off
 cargo run -p hidprobe -- effect 2 0    # динамический эффект 0
 ```
 
+## Проверка SC-каналов (screen sync) на железе
+
+```bash
+cargo run -p quiklight-core --example sync_probe
+```
+
+Показывает на ленте два градиента (многочанковые SC-кадры: 51 LED × 3 байта =
+153 байта payload → 3 HID-отчёта), затем гасит. Полезно, если screen sync
+в приложении не работает, а статичный цвет — работает.
+
 ## Тесты
 
 ```bash
