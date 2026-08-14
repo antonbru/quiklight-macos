@@ -1,0 +1,9 @@
+[package]
+name = "hidprobe"
+version.workspace = true
+edition.workspace = true
+description = "CLI-утилита для проверки панели QuikLight (фаза 0): info/color/brightness/off/effect"
+
+[dependencies]
+quiklight-core = { path = "../quiklight-core" }
+hidapi = "2"

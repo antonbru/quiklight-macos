@@ -1,0 +1,16 @@
+[package]
+name = "quiklight-core"
+version.workspace = true
+edition.workspace = true
+description = "Ядро QuikLight: протокол RB/SC и HID-транспорт для панели Robobloq QuikLight"
+
+[dependencies]
+hidapi = "2"
+
+# ScreenCaptureKit (screen sync, macOS 14+)
+block2 = "0.6"
+objc2 = "0.6"
+objc2-core-foundation = { version = "0.3", features = ["CFCGTypes"] }
+objc2-core-graphics = { version = "0.3", features = ["CGBitmapContext", "CGColor", "CGColorSpace", "CGContext", "CGImage"] }
+objc2-foundation = { version = "0.3", features = ["NSArray", "NSError", "NSString"] }
+objc2-screen-capture-kit = { version = "0.3", features = ["SCScreenshotManager", "SCShareableContent", "SCStream", "block2"] }
