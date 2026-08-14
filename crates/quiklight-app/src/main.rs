@@ -12,13 +12,16 @@ use std::cell::{Cell, RefCell};
 use std::sync::mpsc::{self, Receiver, Sender};
 
 use objc2::rc::Retained;
-use objc2::runtime::{AnyObject, NSObject, Sel};
+use objc2::runtime::{AnyObject, Bool, NSObject, Sel};
 use objc2::{define_class, msg_send, sel, DefinedClass, MainThreadMarker, MainThreadOnly};
+
+use block2::RcBlock;
 use objc2_app_kit::{
-    NSAlert, NSApplication, NSApplicationActivationPolicy, NSBackingStoreType, NSButton, NSColor,
-    NSColorPanel, NSColorSpace, NSControl, NSControlStateValueOff, NSControlStateValueOn, NSMenu,
-    NSMenuItem, NSSlider, NSStepper, NSStatusBar, NSStatusItem, NSTextField, NSVariableStatusItemLength,
-    NSView, NSWindow, NSWindowStyleMask,
+    NSAlert, NSApplication, NSApplicationActivationPolicy, NSBackingStoreType, NSBezierPath, NSButton,
+    NSButtonType, NSCellImagePosition, NSColor, NSColorPanel, NSColorSpace, NSControl,
+    NSControlStateValueOff, NSControlStateValueOn, NSImage, NSImageScaling, NSMenu, NSMenuItem,
+    NSSlider, NSStepper, NSStatusBar, NSStatusItem, NSTextField, NSVariableStatusItemLength, NSView,
+    NSWindow, NSWindowStyleMask,
 };
 use objc2_core_foundation::CGFloat;
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString, NSTimer};
@@ -49,6 +52,9 @@ struct SettingsPanel {
     off_check: Retained<NSButton>,
 }
 
+/// Кнопка-кружок пресета палитры: цвет (R, G, B) + кнопка.
+type PresetButton = (u8, u8, u8, Retained<NSButton>);
+
 /// Ивар-хранилище делегата приложения.
 struct AppIvars {
     /// Канал команд в фоновый поток.
@@ -71,6 +77,7 @@ struct AppIvars {
     power_item: RefCell<Option<Retained<NSMenuItem>>>,
     mode_items: RefCell<Vec<(Mode, Retained<NSMenuItem>)>>,
     effect_items: RefCell<Vec<(u8, u8, Retained<NSMenuItem>)>>,
+    preset_items: RefCell<Vec<PresetButton>>,
     brightness_slider: RefCell<Option<Retained<NSSlider>>>,
     settings_panel: RefCell<Option<SettingsPanel>>,
     color_panel: RefCell<Option<Retained<NSColorPanel>>>,
@@ -80,6 +87,23 @@ struct AppIvars {
 const TAG_MODE_OFF: isize = 0;
 const TAG_MODE_STATIC: isize = 1;
 const TAG_MODE_SYNC: isize = 2;
+
+/// Готовые оттенки для статичного цвета (имя — подсказка, R, G, B).
+/// В меню показываются одной строкой цветных кружков без названий.
+const PRESET_COLORS: &[(&str, u8, u8, u8)] = &[
+    ("Белый", 255, 255, 255),
+    ("Тёплый белый", 255, 235, 205),
+    ("Красный", 255, 50, 50),
+    ("Оранжевый", 255, 140, 0),
+    ("Жёлтый", 255, 220, 40),
+    ("Зелёный", 60, 255, 60),
+    ("Бирюзовый", 0, 230, 200),
+    ("Голубой", 60, 200, 255),
+    ("Синий", 60, 110, 255),
+    ("Фиолетовый", 170, 60, 255),
+    ("Розовый", 255, 90, 180),
+    ("Пурпурный", 255, 60, 255),
+];
 
 // ───────────────────────────── Делегат ─────────────────────────────
 
@@ -176,6 +200,32 @@ define_class!(
             panel.orderFront(Some(self));
             NSApplication::sharedApplication(mtm).activate();
             *self.ivars().color_panel.borrow_mut() = Some(panel);
+        }
+
+        #[unsafe(method(setPresetColor:))]
+        fn set_preset_color(&self, sender: &AnyObject) {
+            // Сендер — кнопка-кружок в строке палитры (тег = индекс пресета).
+            let idx = if let Some(btn) = sender.downcast_ref::<NSButton>() {
+                btn.tag()
+            } else if let Some(item) = sender.downcast_ref::<NSMenuItem>() {
+                item.tag()
+            } else {
+                return;
+            };
+            let Some(&(_, r, g, b)) = PRESET_COLORS.get(idx as usize) else { return };
+            self.ivars().color.set((r, g, b));
+            self.ivars().mode.set(Mode::Static);
+            self.ivars().power.set(true);
+            self.send(Command::SetPower(true));
+            self.send(Command::SetMode(Mode::Static));
+            self.send(Command::SetColor { r, g, b });
+            // Синхронизируем открытую панель цвета.
+            if let Some(panel) = self.ivars().color_panel.borrow().clone() {
+                panel.setColor(&NSColor::colorWithSRGBRed_green_blue_alpha(
+                    r as CGFloat / 255.0, g as CGFloat / 255.0, b as CGFloat / 255.0, 1.0,
+                ));
+            }
+            self.update_ui();
         }
 
         #[unsafe(method(brightnessChanged:))]
@@ -375,6 +425,14 @@ impl AppDelegate {
             }
         }
 
+        // Палитра: кольцо вокруг текущего пресета (только в режиме статичного цвета).
+        let cur = self.ivars().color.get();
+        let preset_active = power && mode == Mode::Static;
+        for (r, g, b, btn) in self.ivars().preset_items.borrow().iter() {
+            let on = preset_active && (*r, *g, *b) == cur;
+            btn.setImage(Some(&color_circle_image(*r, *g, *b, 16.0, on)));
+        }
+
         // Слайдер яркости.
         if let Some(slider) = self.ivars().brightness_slider.borrow().clone() {
             slider.setDoubleValue(f64::from(self.ivars().brightness.get()));
@@ -440,8 +498,20 @@ impl AppDelegate {
 
         menu.addItem(&NSMenuItem::separatorItem(mtm));
 
-        // Цвет.
-        let color_item = action_item("Цвет…", 0, sel!(openColorPanel:), self, mtm);
+        // Цвет: готовые оттенки — одной строкой цветных кружков без названий.
+        let palette_header = NSMenuItem::new(mtm);
+        palette_header.setTitle(&NSString::from_str("Цвет:"));
+        palette_header.setEnabled(false);
+        menu.addItem(&palette_header);
+
+        let (palette_item, preset_items) = preset_palette_row(mtm, self);
+        menu.addItem(&palette_item);
+        *self.ivars().preset_items.borrow_mut() = preset_items;
+
+        menu.addItem(&NSMenuItem::separatorItem(mtm));
+
+        // Произвольный цвет — системная палитра.
+        let color_item = action_item("Другой цвет…", 0, sel!(openColorPanel:), self, mtm);
         menu.addItem(&color_item);
 
         // Яркость — слайдер внутри пункта меню.
@@ -598,6 +668,76 @@ fn action_item(
         item.setAction(Some(action));
     }
     item
+}
+
+/// Пункт меню «палитра»: одна строка цветных кружков без названий.
+/// Возвращает пункт меню и кнопки (R, G, B, кнопка) для подсветки выбора.
+fn preset_palette_row(
+    mtm: MainThreadMarker,
+    target: &AppDelegate,
+) -> (Retained<NSMenuItem>, Vec<PresetButton>) {
+    const CIRCLE: f64 = 18.0; // сторона кнопки-кружка
+    const GAP: f64 = 4.0; // промежуток между кружками
+    const PAD: f64 = 6.0; // отступ слева/справа
+
+    let n = PRESET_COLORS.len() as f64;
+    let width = PAD * 2.0 + n * CIRCLE + (n - 1.0) * GAP;
+    let height = CIRCLE + 6.0;
+
+    let view = NSView::new(mtm);
+    view.setFrame(NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width, height)));
+
+    let mut buttons = Vec::new();
+    for (i, (name, r, g, b)) in PRESET_COLORS.iter().enumerate() {
+        let x = PAD + i as f64 * (CIRCLE + GAP);
+        let btn = NSButton::new(mtm);
+        btn.setFrame(NSRect::new(NSPoint::new(x, 3.0), NSSize::new(CIRCLE, CIRCLE)));
+        btn.setButtonType(NSButtonType::MomentaryChange);
+        btn.setBordered(false);
+        btn.setImagePosition(NSCellImagePosition::ImageOnly);
+        btn.setImageScaling(NSImageScaling::ScaleProportionallyDown);
+        btn.setImage(Some(&color_circle_image(*r, *g, *b, 16.0, false)));
+        btn.setTag(i as isize);
+        btn.setToolTip(Some(&NSString::from_str(name)));
+        control_action(&btn, target, sel!(setPresetColor:));
+        view.addSubview(&btn);
+        buttons.push((*r, *g, *b, btn));
+    }
+
+    let item = NSMenuItem::new(mtm);
+    item.setView(Some(&view));
+    (item, buttons)
+}
+
+/// Иконка-кружок цвета; `selected` рисует вокруг кружка контрастное кольцо.
+fn color_circle_image(r: u8, g: u8, b: u8, size: f64, selected: bool) -> Retained<NSImage> {
+    // Рисуем кружок через block-based API (lockFocus устарел).
+    let drawing = RcBlock::new(move |rect: NSRect| -> Bool {
+        let inset = NSRect::new(
+            NSPoint::new(rect.origin.x + 1.5, rect.origin.y + 1.5),
+            NSSize::new(rect.size.width - 3.0, rect.size.height - 3.0),
+        );
+        let path = NSBezierPath::bezierPathWithOvalInRect(inset);
+        NSColor::colorWithSRGBRed_green_blue_alpha(
+            r as CGFloat / 255.0,
+            g as CGFloat / 255.0,
+            b as CGFloat / 255.0,
+            1.0,
+        )
+        .set();
+        path.fill();
+        if selected {
+            // Кольцо вокруг выбранного кружка: тёмное на светлых цветах, светлое на тёмных —
+            // видно и в светлой, и в тёмной теме меню.
+            let luminance = 0.299 * f64::from(r) + 0.587 * f64::from(g) + 0.114 * f64::from(b);
+            let ring = if luminance > 140.0 { 0.25 } else { 1.0 };
+            NSColor::colorWithSRGBRed_green_blue_alpha(ring, ring, ring, 1.0).setStroke();
+            path.setLineWidth(2.0);
+            path.stroke();
+        }
+        Bool::YES
+    });
+    NSImage::imageWithSize_flipped_drawingHandler(NSSize::new(size, size), true, &drawing)
 }
 
 /// Повесить действие на контрол (слайдер/степпер/кнопку).
@@ -779,6 +919,7 @@ fn main() {
             power_item: RefCell::new(None),
             mode_items: RefCell::new(Vec::new()),
             effect_items: RefCell::new(Vec::new()),
+            preset_items: RefCell::new(Vec::new()),
             brightness_slider: RefCell::new(None),
             settings_panel: RefCell::new(None),
             color_panel: RefCell::new(None),
