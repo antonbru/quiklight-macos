@@ -10,8 +10,8 @@ pub const HID_REPORT_SIZE: usize = 64;
 
 /// Константы маркеров кадров.
 pub mod marker {
-    pub const RB: [u8; 2] = [b'R', b'B'];
-    pub const SC: [u8; 2] = [b'S', b'C'];
+    pub const RB: [u8; 2] = *b"RB";
+    pub const SC: [u8; 2] = *b"SC";
 }
 
 /// Сырой кадр без контрольной суммы: помогает построить кадр отдельно от

@@ -89,7 +89,8 @@ pub fn capture_grid(
             }
 
             if count > 0 {
-                grid.push(((r_sum / count) as u8, (g_sum / count) as u8, (b_sum / count) as u8));
+                let avg = |sum: u64| (sum.checked_div(count).unwrap_or(0)) as u8;
+                grid.push((avg(r_sum), avg(g_sum), avg(b_sum)));
             } else {
                 grid.push((0, 0, 0));
             }
@@ -408,8 +409,8 @@ mod tests {
         // Сетка 3×3: верх чёрный, всё остальное белое.
         // Верх должен замениться второй строкой (белой).
         let mut grid = vec![(0, 0, 0); 9];
-        for i in 3..9 {
-            grid[i] = (255, 255, 255);
+        for c in grid.iter_mut().skip(3) {
+            *c = (255, 255, 255);
         }
         let edges = extract_border_colors(&grid, 3, 3);
         assert_eq!(edges.top.len(), 3);

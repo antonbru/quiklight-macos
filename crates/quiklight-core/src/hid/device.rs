@@ -163,7 +163,7 @@ impl Device {
     pub fn parse_rb_response(buf: &[u8]) -> Result<Vec<u8>, DeviceError> {
         let start = buf
             .windows(2)
-            .position(|w| w == [b'R', b'B'])
+            .position(|w| w == *b"RB")
             .ok_or(DeviceError::BadResponse)?;
         Ok(buf[start..].to_vec())
     }

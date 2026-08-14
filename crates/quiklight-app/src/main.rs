@@ -135,7 +135,7 @@ define_class!(
             let tag = item.tag();
             // tag = tipo*100 + index (200..206 — динамика, 300..306 — звук).
             let (tipo, index) = ((tag / 100) as u8, (tag % 100) as u8);
-            self.ivars().mode.set(Mode::Effects(tipo as u8, index as u8));
+            self.ivars().mode.set(Mode::Effects(tipo, index));
             self.ivars().power.set(true);
             self.send(Command::SetPower(true));
             self.send(Command::SetMode(self.ivars().mode.get()));
@@ -609,6 +609,7 @@ fn value_field(mtm: MainThreadMarker) -> Retained<NSTextField> {
 }
 
 /// Строка «метка + степпер + поле значения»; степпер по тегу обновляет поле.
+#[allow(clippy::too_many_arguments)]
 fn stepper_row(
     content: &NSView,
     tag: isize,
@@ -639,6 +640,7 @@ fn stepper_row(
 }
 
 /// Строка «метка + слайдер + поле значения»; слайдер по тегу обновляет поле.
+#[allow(clippy::too_many_arguments)]
 fn slider_row(
     content: &NSView,
     tag: isize,

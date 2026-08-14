@@ -293,15 +293,12 @@ fn turn_off_all(device: &mut Device) -> Result<(), DeviceError> {
 }
 
 fn turn_off_and_report(state: &mut State, events_tx: &Sender<WorkerEvent>) {
-    match state.device.as_mut() {
-        Some(device) => {
-            if let Err(e) = turn_off_all(device) {
-                state.device = None;
-                let _ = events_tx.send(WorkerEvent::DeviceChanged { connected: false, info: None });
-                let _ = events_tx.send(WorkerEvent::Error(format!("Устройство отключилось: {e}")));
-            }
+    if let Some(device) = state.device.as_mut() {
+        if let Err(e) = turn_off_all(device) {
+            state.device = None;
+            let _ = events_tx.send(WorkerEvent::DeviceChanged { connected: false, info: None });
+            let _ = events_tx.send(WorkerEvent::Error(format!("Устройство отключилось: {e}")));
         }
-        None => {}
     }
 }
 
