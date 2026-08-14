@@ -243,11 +243,22 @@ fn handle_command(state: &mut State, cmd: Command, events_tx: &Sender<WorkerEven
         Command::SetBrightness(v) => {
             state.brightness = v.min(100);
             let brightness = state.brightness;
+            let static_mode = state.power && state.mode == Mode::Static;
             if let Some(device) = device_or_reconnect(state, events_tx) {
                 let id = device.next_session_id();
-                if let Err(e) = device.write_with_response(&set_brightness(id, brightness)) {
+                // Пишем без ожидания ответа: ответ на 0x87 нам не нужен, а
+                // write_with_response блокирует поток на 200–700 мс на каждый
+                // тик слайдера (очередь команд растягивается, а при отсутствии
+                // ответа — ложный device_lost и переподключение).
+                if let Err(e) = device.write_frame(&set_brightness(id, brightness)) {
                     device_lost(state, events_tx, &e);
                 }
+            }
+            // Панель применяет яркость только при следующем рендере кадра,
+            // поэтому после изменения яркости перерисовываем статичный цвет —
+            // иначе яркость «проявляется» лишь при следующей смене цвета.
+            if static_mode {
+                apply_static(state, events_tx);
             }
         }
         Command::SetSettings(s) => {
