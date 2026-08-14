@@ -18,9 +18,9 @@ use objc2::{define_class, msg_send, sel, DefinedClass, MainThreadMarker, MainThr
 use block2::RcBlock;
 use objc2_app_kit::{
     NSAlert, NSApplication, NSApplicationActivationPolicy, NSBackingStoreType, NSBezierPath, NSButton,
-    NSButtonType, NSCellImagePosition, NSColor, NSColorPanel, NSColorSpace, NSControl,
-    NSControlStateValueOff, NSControlStateValueOn, NSImage, NSImageScaling, NSMenu, NSMenuItem,
-    NSSlider, NSStepper, NSStatusBar, NSStatusItem, NSTextField, NSVariableStatusItemLength, NSView,
+    NSButtonType, NSCellImagePosition, NSColor, NSControl, NSControlStateValueOff,
+    NSControlStateValueOn, NSImage, NSImageScaling, NSMenu, NSMenuItem, NSSlider, NSStepper,
+    NSStatusBar, NSStatusItem, NSSwitch, NSTextField, NSVariableStatusItemLength, NSView,
     NSWindow, NSWindowStyleMask,
 };
 use objc2_core_foundation::CGFloat;
@@ -74,18 +74,17 @@ struct AppIvars {
     // Хэндлы UI (заполняются в `build_ui`).
     status_item: RefCell<Option<Retained<NSStatusItem>>>,
     status_header: RefCell<Option<Retained<NSMenuItem>>>,
-    power_item: RefCell<Option<Retained<NSMenuItem>>>,
+    power_switch: RefCell<Option<Retained<NSSwitch>>>,
     mode_items: RefCell<Vec<(Mode, Retained<NSMenuItem>)>>,
+    effects_menu_item: RefCell<Option<Retained<NSMenuItem>>>,
     effect_items: RefCell<Vec<(u8, u8, Retained<NSMenuItem>)>>,
     fireplace_item: RefCell<Option<Retained<NSMenuItem>>>,
     preset_items: RefCell<Vec<PresetButton>>,
     brightness_slider: RefCell<Option<Retained<NSSlider>>>,
     settings_panel: RefCell<Option<SettingsPanel>>,
-    color_panel: RefCell<Option<Retained<NSColorPanel>>>,
 }
 
-/// Тэги пунктов меню «Режим».
-const TAG_MODE_OFF: isize = 0;
+/// Тэги пунктов меню «Режимы».
 const TAG_MODE_STATIC: isize = 1;
 const TAG_MODE_SYNC: isize = 2;
 
@@ -145,7 +144,6 @@ define_class!(
         fn set_mode(&self, sender: &AnyObject) {
             let Some(item) = sender.downcast_ref::<NSMenuItem>() else { return };
             let mode = match item.tag() {
-                TAG_MODE_OFF => Mode::Off,
                 TAG_MODE_STATIC => Mode::Static,
                 TAG_MODE_SYNC => Mode::Sync,
                 _ => return,
@@ -176,42 +174,6 @@ define_class!(
             self.update_ui();
         }
 
-        #[unsafe(method(changeColor:))]
-        fn change_color(&self, _sender: &AnyObject) {
-            let mtm = MainThreadMarker::new().unwrap();
-            let color = NSColorPanel::sharedColorPanel(mtm).color();
-            let rgb = ns_color_to_rgb(&color);
-            self.ivars().color.set(rgb);
-            self.ivars().mode.set(Mode::Static);
-            self.ivars().power.set(true);
-            self.send(Command::SetPower(true));
-            self.send(Command::SetMode(Mode::Static));
-            self.send(Command::SetColor { r: rgb.0, g: rgb.1, b: rgb.2 });
-            self.update_ui();
-        }
-
-        #[unsafe(method(openColorPanel:))]
-        fn open_color_panel(&self, _sender: &AnyObject) {
-            let mtm = MainThreadMarker::new().unwrap();
-            let panel = self.ivars().color_panel.borrow().clone();
-            let panel = panel.unwrap_or_else(|| {
-                let p = NSColorPanel::sharedColorPanel(mtm);
-                p.setContinuous(true);
-                unsafe {
-                    p.setTarget(Some(self));
-                    p.setAction(Some(sel!(changeColor:)));
-                }
-                p
-            });
-            let (r, g, b) = self.ivars().color.get();
-            panel.setColor(&NSColor::colorWithSRGBRed_green_blue_alpha(
-                r as CGFloat / 255.0, g as CGFloat / 255.0, b as CGFloat / 255.0, 1.0,
-            ));
-            panel.orderFront(Some(self));
-            NSApplication::sharedApplication(mtm).activate();
-            *self.ivars().color_panel.borrow_mut() = Some(panel);
-        }
-
         #[unsafe(method(setPresetColor:))]
         fn set_preset_color(&self, sender: &AnyObject) {
             // Сендер — кнопка-кружок в строке палитры (тег = индекс пресета).
@@ -229,12 +191,6 @@ define_class!(
             self.send(Command::SetPower(true));
             self.send(Command::SetMode(Mode::Static));
             self.send(Command::SetColor { r, g, b });
-            // Синхронизируем открытую панель цвета.
-            if let Some(panel) = self.ivars().color_panel.borrow().clone() {
-                panel.setColor(&NSColor::colorWithSRGBRed_green_blue_alpha(
-                    r as CGFloat / 255.0, g as CGFloat / 255.0, b as CGFloat / 255.0, 1.0,
-                ));
-            }
             self.update_ui();
         }
 
@@ -420,17 +376,20 @@ impl AppDelegate {
             header.setTitle(&NSString::from_str(&text));
         }
 
-        // Пункт «Подсветка».
-        if let Some(item) = self.ivars().power_item.borrow().clone() {
-            let title = if power { "Подсветка: Вкл" } else { "Подсветка: Выкл" };
-            item.setTitle(&NSString::from_str(title));
-            item.setState(if power { NSControlStateValueOn } else { NSControlStateValueOff });
+        // Переключатель подсветки.
+        if let Some(sw) = self.ivars().power_switch.borrow().clone() {
+            sw.setState(if power { NSControlStateValueOn } else { NSControlStateValueOff });
         }
 
         // Радио-пункты режимов.
         let mode = self.ivars().mode.get();
         for (m, item) in self.ivars().mode_items.borrow().iter() {
             item.setState(if *m == mode { NSControlStateValueOn } else { NSControlStateValueOff });
+        }
+        // Пункт «Эффекты» (родитель подменю) — радио-пункт той же группы.
+        if let Some(item) = self.ivars().effects_menu_item.borrow().clone() {
+            let on = matches!(mode, Mode::Effects(..) | Mode::Fireplace);
+            item.setState(if on { NSControlStateValueOn } else { NSControlStateValueOff });
         }
         // Радио-пункты эффектов.
         if let Mode::Effects(tipo, index) = mode {
@@ -478,23 +437,45 @@ impl AppDelegate {
         menu.addItem(&header);
         *self.ivars().status_header.borrow_mut() = Some(header);
 
-        // Подсветка вкл/выкл.
-        let power = action_item("Подсветка: Выкл", 0, sel!(togglePower:), self, mtm);
-        menu.addItem(&power);
-        *self.ivars().power_item.borrow_mut() = Some(power);
+        // Подсветка — переключатель (не пункт меню).
+        let switch_item = NSMenuItem::new(mtm);
+        let switch_view = NSView::new(mtm);
+        switch_view.setFrame(NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(136.0, 24.0)));
+        switch_view.addSubview(&label("Подсветка", 8.0, 3.0, 80.0, mtm));
+        let sw = NSSwitch::new(mtm);
+        sw.setFrame(NSRect::new(NSPoint::new(94.0, 1.0), NSSize::new(38.0, 22.0)));
+        sw.setState(NSControlStateValueOff);
+        control_action(&sw, self, sel!(togglePower:));
+        switch_view.addSubview(&sw);
+        switch_item.setView(Some(&switch_view));
+        menu.addItem(&switch_item);
+        *self.ivars().power_switch.borrow_mut() = Some(sw);
 
         menu.addItem(&NSMenuItem::separatorItem(mtm));
 
-        // Режимы.
-        let mut mode_items = Vec::new();
-        mode_items.push((Mode::Off, action_item("Выключена", TAG_MODE_OFF, sel!(setMode:), self, mtm)));
-        mode_items.push((Mode::Static, action_item("Статичный цвет", TAG_MODE_STATIC, sel!(setMode:), self, mtm)));
-        mode_items.push((Mode::Sync, action_item("Screen sync", TAG_MODE_SYNC, sel!(setMode:), self, mtm)));
-        for (_, item) in &mode_items {
-            menu.addItem(item);
-        }
+        // Режимы: заголовок + радио-пункты (выбрать можно только один).
+        let modes_header = NSMenuItem::new(mtm);
+        modes_header.setTitle(&NSString::from_str("Режимы"));
+        modes_header.setEnabled(false);
+        menu.addItem(&modes_header);
 
-        // Эффекты — подменю.
+        let mut mode_items = Vec::new();
+
+        let static_item = action_item("Статичный цвет", TAG_MODE_STATIC, sel!(setMode:), self, mtm);
+        menu.addItem(&static_item);
+        mode_items.push((Mode::Static, static_item));
+
+        // Кружки цветов — сразу под режимом «Статичный цвет».
+        let (palette_item, preset_items) = preset_palette_row(mtm, self);
+        palette_item.setIndentationLevel(1);
+        menu.addItem(&palette_item);
+        *self.ivars().preset_items.borrow_mut() = preset_items;
+
+        let sync_item = action_item("Screen sync", TAG_MODE_SYNC, sel!(setMode:), self, mtm);
+        menu.addItem(&sync_item);
+        mode_items.push((Mode::Sync, sync_item));
+
+        // Эффекты — подменю; сам пункт — радио-пункт той же группы «Режимы».
         let effects_item = NSMenuItem::new(mtm);
         effects_item.setTitle(&NSString::from_str("Эффекты"));
         let effects_menu = NSMenu::new(mtm);
@@ -522,26 +503,11 @@ impl AppDelegate {
 
         effects_item.setSubmenu(Some(&effects_menu));
         menu.addItem(&effects_item);
+        *self.ivars().effects_menu_item.borrow_mut() = Some(effects_item);
         *self.ivars().effect_items.borrow_mut() = effect_items;
         *self.ivars().mode_items.borrow_mut() = mode_items;
 
         menu.addItem(&NSMenuItem::separatorItem(mtm));
-
-        // Цвет: готовые оттенки — одной строкой цветных кружков без названий.
-        let palette_header = NSMenuItem::new(mtm);
-        palette_header.setTitle(&NSString::from_str("Цвет:"));
-        palette_header.setEnabled(false);
-        menu.addItem(&palette_header);
-
-        let (palette_item, preset_items) = preset_palette_row(mtm, self);
-        menu.addItem(&palette_item);
-        *self.ivars().preset_items.borrow_mut() = preset_items;
-
-        menu.addItem(&NSMenuItem::separatorItem(mtm));
-
-        // Произвольный цвет — системная палитра.
-        let color_item = action_item("Другой цвет…", 0, sel!(openColorPanel:), self, mtm);
-        menu.addItem(&color_item);
 
         // Яркость — слайдер внутри пункта меню.
         let brightness_item = NSMenuItem::new(mtm);
@@ -900,23 +866,6 @@ fn status_line(connected: bool, info: Option<&quiklight_core::hid::device_info::
     }
 }
 
-/// NSColor → (r, g, b) 0..255.
-fn ns_color_to_rgb(color: &NSColor) -> (u8, u8, u8) {
-    let rgb = color.colorUsingColorSpace(&NSColorSpace::deviceRGBColorSpace());
-    let c = rgb.as_deref().unwrap_or(color);
-    let mut r: CGFloat = 0.0;
-    let mut g: CGFloat = 0.0;
-    let mut b: CGFloat = 0.0;
-    unsafe {
-        c.getRed_green_blue_alpha(&mut r, &mut g, &mut b, std::ptr::null_mut());
-    }
-    (
-        (r.clamp(0.0, 1.0) * 255.0).round() as u8,
-        (g.clamp(0.0, 1.0) * 255.0).round() as u8,
-        (b.clamp(0.0, 1.0) * 255.0).round() as u8,
-    )
-}
-
 /// Модальный алерт с сообщением.
 fn show_alert(title: &str, message: &str) {
     let mtm = MainThreadMarker::new().unwrap();
@@ -955,14 +904,14 @@ fn main() {
             device_info: RefCell::new(None),
             status_item: RefCell::new(None),
             status_header: RefCell::new(None),
-            power_item: RefCell::new(None),
+            power_switch: RefCell::new(None),
             mode_items: RefCell::new(Vec::new()),
+            effects_menu_item: RefCell::new(None),
             effect_items: RefCell::new(Vec::new()),
             fireplace_item: RefCell::new(None),
             preset_items: RefCell::new(Vec::new()),
             brightness_slider: RefCell::new(None),
             settings_panel: RefCell::new(None),
-            color_panel: RefCell::new(None),
         },
     );
 
