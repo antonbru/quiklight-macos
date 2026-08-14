@@ -31,11 +31,31 @@ cargo build --workspace $CARGO_ARGS
 
 APP="target/$PROFILE/QuikLight.app"
 BIN="target/$PROFILE/quiklight-app"
+ASSETS="assets/icons"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cp "$BIN" "$APP/Contents/MacOS/quiklight-app"
+
+# Иконка меню-бара (template: чёрный + альфа, macOS перекрашивает под тему).
+cp "$ASSETS"/menubar@1x.png "$ASSETS"/menubar@2x.png "$ASSETS"/menubar@3x.png \
+   "$ASSETS"/menubar18@1x.png "$ASSETS"/menubar18@2x.png "$ASSETS"/menubar18@3x.png \
+   "$APP/Contents/Resources/"
+
+# App icon: из мастера 1024×1024 собираем .icns (sips → iconset → iconutil).
+ICONSET="$(mktemp -d)/AppIcon.iconset"
+mkdir -p "$ICONSET"
+for spec in \
+    "16 icon_16x16.png" "32 icon_16x16@2x.png" \
+    "32 icon_32x32.png" "64 icon_32x32@2x.png" \
+    "128 icon_128x128.png" "256 icon_128x128@2x.png" \
+    "256 icon_256x256.png" "512 icon_256x256@2x.png" \
+    "512 icon_512x512.png" "1024 icon_512x512@2x.png"; do
+    set -- $spec
+    sips -z "$1" "$1" -s format png "$ASSETS/AppIcon-1024.png" --out "$ICONSET/$2" >/dev/null
+done
+iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -56,6 +76,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <string>0.1.0</string>
     <key>CFBundleVersion</key>
     <string>1</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>LSUIElement</key>

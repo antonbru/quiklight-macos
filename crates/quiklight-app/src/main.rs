@@ -77,6 +77,7 @@ struct AppIvars {
     power_item: RefCell<Option<Retained<NSMenuItem>>>,
     mode_items: RefCell<Vec<(Mode, Retained<NSMenuItem>)>>,
     effect_items: RefCell<Vec<(u8, u8, Retained<NSMenuItem>)>>,
+    fireplace_item: RefCell<Option<Retained<NSMenuItem>>>,
     preset_items: RefCell<Vec<PresetButton>>,
     brightness_slider: RefCell<Option<Retained<NSSlider>>>,
     settings_panel: RefCell<Option<SettingsPanel>>,
@@ -87,6 +88,9 @@ struct AppIvars {
 const TAG_MODE_OFF: isize = 0;
 const TAG_MODE_STATIC: isize = 1;
 const TAG_MODE_SYNC: isize = 2;
+
+/// Тэг пункта «Камин» в подменю эффектов (свой программный эффект, не с панели).
+const TAG_EFFECT_FIREPLACE: isize = 900;
 
 /// Готовые оттенки для статичного цвета (имя — подсказка, R, G, B).
 /// В меню показываются одной строкой цветных кружков без названий.
@@ -157,12 +161,18 @@ define_class!(
         fn set_effect(&self, sender: &AnyObject) {
             let Some(item) = sender.downcast_ref::<NSMenuItem>() else { return };
             let tag = item.tag();
-            // tag = tipo*100 + index (200..206 — динамика, 300..306 — звук).
-            let (tipo, index) = ((tag / 100) as u8, (tag % 100) as u8);
-            self.ivars().mode.set(Mode::Effects(tipo, index));
+            // tag = tipo*100 + index (200..206 — динамика, 300..306 — звук);
+            // 900 — свой эффект «Камин».
+            let mode = if tag == TAG_EFFECT_FIREPLACE {
+                Mode::Fireplace
+            } else {
+                let (tipo, index) = ((tag / 100) as u8, (tag % 100) as u8);
+                Mode::Effects(tipo, index)
+            };
+            self.ivars().mode.set(mode);
             self.ivars().power.set(true);
             self.send(Command::SetPower(true));
-            self.send(Command::SetMode(self.ivars().mode.get()));
+            self.send(Command::SetMode(mode));
             self.update_ui();
         }
 
@@ -384,11 +394,19 @@ impl AppDelegate {
         let mtm = MainThreadMarker::new().unwrap();
         let power = self.ivars().power.get();
 
-        // Заголовок в menu bar: ● / ○.
+        // Иконка в menu bar: template-изображение (меняется под тему macOS),
+        // при выключенной подсветке — полупрозрачная.
         if let Some(status) = self.ivars().status_item.borrow().clone() {
             if let Some(button) = status.button(mtm) {
-                let title = if power { "◉" } else { "○" };
-                button.setTitle(&NSString::from_str(title));
+                if let Some(icon) = status_icon() {
+                    button.setImage(Some(&icon));
+                    button.setTitle(&NSString::from_str(""));
+                } else {
+                    // Фолбэк без .app-бандла (cargo run): старый глиф.
+                    let title = if power { "◉" } else { "○" };
+                    button.setTitle(&NSString::from_str(title));
+                }
+                button.setAlphaValue(if power { 1.0 } else { 0.35 });
             }
         }
 
@@ -423,6 +441,10 @@ impl AppDelegate {
             for (_, _, item) in self.ivars().effect_items.borrow().iter() {
                 item.setState(NSControlStateValueOff);
             }
+        }
+        // Пункт «Камин» — своё место в той же группе радио-пунктов.
+        if let Some(item) = self.ivars().fireplace_item.borrow().clone() {
+            item.setState(if mode == Mode::Fireplace { NSControlStateValueOn } else { NSControlStateValueOff });
         }
 
         // Палитра: кольцо вокруг текущего пресета (только в режиме статичного цвета).
@@ -491,6 +513,13 @@ impl AppDelegate {
                 effect_items.push((tipo, idx as u8, item));
             }
         }
+
+        // Свой эффект «Камин» — плавно мерцающее пламя (рисует сам движок).
+        effects_menu.addItem(&NSMenuItem::separatorItem(mtm));
+        let fireplace_item = action_item("Камин", TAG_EFFECT_FIREPLACE, sel!(setEffect:), self, mtm);
+        effects_menu.addItem(&fireplace_item);
+        *self.ivars().fireplace_item.borrow_mut() = Some(fireplace_item);
+
         effects_item.setSubmenu(Some(&effects_menu));
         menu.addItem(&effects_item);
         *self.ivars().effect_items.borrow_mut() = effect_items;
@@ -709,6 +738,16 @@ fn preset_palette_row(
     (item, buttons)
 }
 
+/// Template-иконка menu bar (18 pt, набор `menubar18@1x/@2x/@3x` из
+/// Resources бандла). `imageNamed:` сам подбирает ретину-репрезентации;
+/// template = macOS перекрашивает под светлую/тёмную тему.
+fn status_icon() -> Option<Retained<NSImage>> {
+    let image = NSImage::imageNamed(&NSString::from_str("menubar18"))?;
+    image.setTemplate(true);
+    image.setSize(NSSize::new(18.0, 18.0));
+    Some(image)
+}
+
 /// Иконка-кружок цвета; `selected` рисует вокруг кружка контрастное кольцо.
 fn color_circle_image(r: u8, g: u8, b: u8, size: f64, selected: bool) -> Retained<NSImage> {
     // Рисуем кружок через block-based API (lockFocus устарел).
@@ -919,6 +958,7 @@ fn main() {
             power_item: RefCell::new(None),
             mode_items: RefCell::new(Vec::new()),
             effect_items: RefCell::new(Vec::new()),
+            fireplace_item: RefCell::new(None),
             preset_items: RefCell::new(Vec::new()),
             brightness_slider: RefCell::new(None),
             settings_panel: RefCell::new(None),
