@@ -34,10 +34,10 @@ pub enum Mode {
 /// Настройки приложения (общие для UI и потока).
 #[derive(Debug, Clone, Copy)]
 pub struct Settings {
-    /// Число LED ленты.
+    /// Число LED ленты; **0 = авто** (брать из `readDeviceInfo`, запасной 63).
     pub led_count: u16,
     /// Ручная раскладка по краям; если сумма 0 — автоматическая 17/29/17
-    /// под `led_count` (см. `EdgeLayout::default_for`).
+    /// под эффективное число LED (см. `EdgeLayout::default_for`).
     pub layout: EdgeLayout,
     /// Частота screen sync, кадров/с (20..=60).
     pub fps: u8,
@@ -56,7 +56,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            led_count: 63,
+            led_count: 0, // авто — из устройства
             layout: EdgeLayout { left: 0, top: 0, right: 0, bottom: 0 },
             fps: 30,
             gamma: 1.0,
@@ -69,12 +69,22 @@ impl Default for Settings {
 }
 
 impl Settings {
-    /// Эффективная раскладка: ручная, если задана, иначе авто-пропорции.
-    pub fn layout_effective(&self) -> EdgeLayout {
+    /// Эффективное число LED: ручное, если задано, иначе из устройства (63 — запасной).
+    pub fn led_count_effective(&self, device_led: Option<u16>) -> u16 {
+        if self.led_count > 0 {
+            self.led_count
+        } else {
+            device_led.filter(|&n| n > 0).unwrap_or(63)
+        }
+    }
+
+    /// Эффективная раскладка: ручная, если задана, иначе авто-пропорции
+    /// под эффективное число LED.
+    pub fn layout_effective(&self, device_led: Option<u16>) -> EdgeLayout {
         if self.layout.total() > 0 {
             self.layout
         } else {
-            EdgeLayout::default_for(self.led_count)
+            EdgeLayout::default_for(self.led_count_effective(device_led))
         }
     }
 
@@ -139,6 +149,8 @@ struct State {
     brightness: u8,
     color: (u8, u8, u8),
     device: Option<Device>,
+    /// Число LED, прочитанное с устройства (для авто-режима настроек).
+    device_led: Option<u16>,
     capturer: Option<ScreenCapturer>,
     extractor: ColorExtractor,
     /// Ошибка screen sync уже показана пользователю (не спамить).
@@ -153,6 +165,7 @@ fn run(cmd_rx: Receiver<Command>, events_tx: Sender<WorkerEvent>) {
         brightness: 100,
         color: (255, 255, 255),
         device: None,
+        device_led: None,
         capturer: None,
         extractor: ColorExtractor::new(Settings::default().postprocess()),
         sync_error_reported: false,
@@ -314,6 +327,8 @@ fn report_device(state: &mut State, events_tx: &Sender<WorkerEvent>) {
                 .ok()
                 .and_then(|raw| Device::parse_rb_response(&raw).ok())
                 .and_then(|frame| quiklight_core::hid::device_info::parse_device_info(&frame));
+            // Запоминаем фактическое число LED — для авто-раскладки screen sync.
+            state.device_led = info.as_ref().map(|i| u16::from(i.led_count));
             let _ = events_tx.send(WorkerEvent::DeviceChanged { connected: true, info });
         }
         None => {
@@ -356,7 +371,7 @@ fn sync_step(state: &mut State, events_tx: &Sender<WorkerEvent>) {
     };
     state.sync_error_reported = false;
 
-    let layout = state.settings.layout_effective();
+    let layout = state.settings.layout_effective(state.device_led);
     let colors = state
         .extractor
         .extract(&frame.data, frame.pitch as u32, frame.width, frame.height, &layout);

@@ -209,7 +209,7 @@ define_class!(
             let panel_ref = self.ivars().settings_panel.borrow();
             let Some(panel) = panel_ref.as_ref() else { return };
 
-            let led = panel.led_stepper.doubleValue().round().clamp(1.0, 500.0) as u16;
+            let led = panel.led_stepper.doubleValue().round().clamp(0.0, 500.0) as u16;
             let top = panel.top_stepper.doubleValue().round().clamp(0.0, 200.0) as u16;
             let left = panel.left_stepper.doubleValue().round().clamp(0.0, 200.0) as u16;
             let right = panel.right_stepper.doubleValue().round().clamp(0.0, 200.0) as u16;
@@ -464,9 +464,9 @@ impl AppDelegate {
         // Заголовок.
         content.addSubview(&label("Настройки QuikLight", 12.0, 440.0, 380.0, mtm));
 
-        // Число LED.
-        content.addSubview(&label("Число LED", 12.0, 408.0, 120.0, mtm));
-        let (led_field, led_stepper) = stepper_row(&content, 1, 63.0, 1.0, 500.0, 140.0, 408.0, self, mtm);
+        // Число LED (0 = авто — из устройства).
+        content.addSubview(&label("Число LED (0 = авто)", 12.0, 408.0, 160.0, mtm));
+        let (led_field, led_stepper) = stepper_row(&content, 1, 0.0, 0.0, 500.0, 160.0, 408.0, self, mtm);
 
         // Раскладка.
         content.addSubview(&label("Раскладка (0 = авто 17/29/17)", 12.0, 374.0, 300.0, mtm));
