@@ -131,6 +131,8 @@ pub enum WorkerEvent {
     ModeChanged(Mode),
     /// Ошибка (например, нет разрешения «Запись экрана»).
     Error(String),
+    /// Поток завершился (после погашения LED при выходе).
+    Exited,
 }
 
 /// Запустить фоновый поток.
@@ -209,6 +211,8 @@ fn run(cmd_rx: Receiver<Command>, events_tx: Sender<WorkerEvent>) {
             let _ = turn_off_all(device);
         }
     }
+    // Сообщаем UI, что поток завершился (UI ждёт это перед выходом).
+    let _ = events_tx.send(WorkerEvent::Exited);
 }
 
 /// Обработать команду. Возвращает `false`, если поток должен завершиться.

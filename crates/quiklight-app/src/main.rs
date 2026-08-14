@@ -278,6 +278,18 @@ define_class!(
         #[unsafe(method(quit:))]
         fn quit(&self, _sender: &AnyObject) {
             self.send(Command::Quit);
+            // Ждём ack «поток завершился»: он гасит LED (если включена опция).
+            // Ограничено 2 секундами, чтобы не зависнуть при сбое захвата экрана.
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+            while std::time::Instant::now() < deadline {
+                {
+                    let events = self.ivars().events.borrow_mut();
+                    if events.try_iter().any(|e| matches!(e, WorkerEvent::Exited)) {
+                        break;
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
             let mtm = MainThreadMarker::new().unwrap();
             NSApplication::sharedApplication(mtm).terminate(Some(self));
         }
@@ -310,6 +322,9 @@ impl AppDelegate {
             }
             WorkerEvent::Error(message) => {
                 show_alert("QuikLight", &message);
+            }
+            WorkerEvent::Exited => {
+                // Поток завершился (при выходе) — UI больше ничего не делает.
             }
         }
     }
