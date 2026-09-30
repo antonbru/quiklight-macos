@@ -34,13 +34,18 @@
 
 ## Сборка
 
-Требуется только Rust (stable) и Command Line Tools (не Xcode):
+Требуется только Rust (stable) и Command Line Tools (не Xcode). Скрипт
+`build_app.sh` сам вызывает `cargo build`, поэтому достаточно одной команды:
 
 ```bash
-cargo build --release
-./scripts/build_app.sh --release        # собирает target/release/QuikLight.app
+./scripts/build_app.sh --release        # соберёт target/release/QuikLight.app
 open target/release/QuikLight.app
 ```
+
+Полезные варианты: `--debug` (debug-профиль), `--skip-sign` (без подписи),
+`--sign "Имя сертификата"` (постоянная подпись — разрешение «Запись экрана»
+переживает пересборки). `cargo build --release` можно запускать и отдельно,
+если нужна только проверка компиляции.
 
 ## Использование
 
@@ -111,26 +116,31 @@ cargo run -p quiklight-core --example sync_probe
 153 байта payload → 3 HID-отчёта), затем гасит. Полезно, если screen sync
 в приложении не работает, а статичный цвет — работает.
 
-## Тесты
+## Разработка
 
 ```bash
-cargo test --workspace
+cargo fmt --all                         # форматирование
+cargo clippy --workspace --all-targets  # линтер (должен быть чист)
+cargo test --workspace                  # юнит-тесты
 ```
 
 Юнит-тесты протокола (checksum, чанкинг, эталонные hex-пакеты, парсер
-`readDeviceInfo` — включая реальный ответ панели) и screen sync (маппинг
-краёв, постобработка) не требуют железа.
+`readDeviceInfo` — включая реальный ответ панели), screen sync (маппинг
+краёв, постобработка) и эффекта «Камин» не требуют железа — их можно
+запускать без подключённой панели.
 
 ## Структура
 
 ```
 crates/
 ├── quiklight-core/   # протокол RB/SC, HID-транспорт, захват экрана, цвет
+│   └── examples/sync_probe.rs   # диагностика SC-каналов на железе
 ├── quiklight-app/    # menu bar приложение (AppKit через objc2)
+│   └── src/{main,app,menu,settings_window,ui,settings,engine}.rs + effects/fireplace.rs
 └── hidprobe/         # CLI-проверка железа (фаза 0)
-assets/icons/         # иконки: AppIcon-1024.png (мастер) + template-наборы меню-бара + preview-appicon.png
-scripts/build_app.sh  # сборка .app-бандла (+ ad-hoc подпись)
-docs/                 # PROTOCOL.md, REFERENCES.md, ICON_TZ.md
+assets/icons/         # AppIcon-1024.png (мастер) + template-наборы меню-бара + preview-appicon.png
+scripts/build_app.sh  # сборка .app-бандла (+ подпись: ad-hoc или сертификатом)
+docs/                 # PROTOCOL.md, REFERENCES.md, ARCHITECTURE.md, ICON_TZ.md
 ```
 
 ## Ограничения
@@ -138,5 +148,8 @@ docs/                 # PROTOCOL.md, REFERENCES.md, ICON_TZ.md
 - **Screen sync требует macOS 14+** (используется `SCScreenshotManager`);
   статичные режимы и эффекты работают на macOS 13+.
 - BLE/донгл-вариант панели не поддерживается (другой протокол).
+- **Настройки и выбранный режим не сохраняются** между запусками — живут
+  в памяти процесса и сбрасываются при выходе (персистентность в планах).
+- Автозапуск при входе в систему пока не реализован.
 - При одновременной работе с официальным SyncLight возможны конфликты записи
   в HID — закрывайте SyncLight.
