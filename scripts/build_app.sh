@@ -3,7 +3,12 @@
 # Robobloq QuikLight (без Xcode, только Command Line Tools).
 #
 # Результат: target/release/QuikLight.app
-# Использование: ./scripts/build_app.sh [--release|--debug] [--skip-sign]
+# Использование: ./scripts/build_app.sh [--release|--debug|--skip-sign] [--sign "ИМЯ"]
+#   --sign "ИМЯ"  — подписать постоянным сертификатом (имя из связки ключей):
+#                   разрешение «Запись экрана» переживает пересборки.
+#                   Без --sign используется ad-hoc подпись (-s -), которая при
+#                   каждой пересборке меняет «личность» приложения → macOS снова
+#                   запрашивает разрешение (см. README, «Запись экрана»).
 
 set -euo pipefail
 
@@ -22,8 +27,14 @@ elif [ "$MODE" = "--release" ]; then
     PROFILE="release"
     CARGO_ARGS="--release"
 else
-    echo "Использование: $0 [--release|--debug] [--skip-sign]" >&2
+    echo "Использование: $0 [--release|--debug|--skip-sign] [--sign \"ИМЯ\"]" >&2
     exit 2
+fi
+
+# Постоянный сертификат для подписи (второй аргумент --sign "ИМЯ").
+IDENTITY=""
+if [ "${2:-}" = "--sign" ] && [ -n "${3:-}" ]; then
+    IDENTITY="$3"
 fi
 
 echo "▶ Сборка ($PROFILE)..."
@@ -91,8 +102,22 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 PLIST
 
 if [ "$SKIP_SIGN" = "0" ]; then
-    echo "▶ Ad-hoc подпись..."
-    codesign --force --deep -s - "$APP"
+    if [ -n "$IDENTITY" ]; then
+        echo "▶ Подпись сертификатом «$IDENTITY»..."
+        codesign --force --deep --sign "$IDENTITY" "$APP"
+    else
+        echo "▶ Ad-hoc подпись (-s -)..."
+        codesign --force --deep -s - "$APP"
+        echo
+        echo "⚠ Ad-hoc подпись при каждой пересборке меняет «личность» приложения:"
+        echo "  macOS снова запросит разрешение «Запись экрана» (старая запись в"
+        echo "  настройках останется, но к новому бинарнику не применится)."
+        echo "  Чтобы разрешение переживало пересборки, подпишите постоянным"
+        echo "  сертификатом:"
+        echo "    ./scripts/build_app.sh --release --sign \"Имя сертификата\""
+        echo "  (создать: Keychain Access → Certificate Assistant → Create a"
+        echo "  Certificate → тип Code Signing; подробнее — README, «Запись экрана»)."
+    fi
 fi
 
 echo "✓ Готово: $APP"

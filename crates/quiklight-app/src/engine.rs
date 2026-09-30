@@ -16,7 +16,7 @@ use quiklight_core::protocol::actions::{
 use quiklight_core::protocol::packet::sc_frame;
 use quiklight_core::sync::color_extractor::{ColorExtractor, PostProcessConfig};
 use quiklight_core::sync::led_mapper::EdgeLayout;
-use quiklight_core::sync::screen_capturer::ScreenCapturer;
+use quiklight_core::sync::screen_capturer::{CaptureError, ScreenCapturer};
 
 /// Режим работы подсветки.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -401,6 +401,23 @@ fn report_device(state: &mut State, events_tx: &Sender<WorkerEvent>) {
     }
 }
 
+/// Сообщение об ошибке screen sync. К ошибкам ScreenCaptureKit (обычно это
+/// разрешение «Запись экрана») добавляем конкретные шаги — иначе пользователь
+/// видит только код ошибки и не понимает, что делать.
+fn sync_error_message(prefix: &str, e: &CaptureError) -> String {
+    let hint = match e {
+        CaptureError::ScreenCapture(_) => "\n\nРазрешение «Запись экрана» не подхватилось:\n\
+            • Системные настройки → Конфиденциальность и безопасность → «Запись экрана и системного звука» (macOS 14: «Запись экрана»);\n\
+            • включён должен быть именно QuikLight — удалите старые записи QuikLight и включите заново;\n\
+            • полностью закройте приложение (Cmd+Q) и запустите снова — разрешение применяется только к новому процессу;\n\
+            • запускайте собранный QuikLight.app (open), а не бинарник из target/;\n\
+            • после пересборки (cargo build / build_app.sh) разрешение нужно выдавать заново: ad-hoc подпись меняет «личность» приложения, и macOS считает его новым."
+            .to_string(),
+        _ => String::new(),
+    };
+    format!("{prefix}: {e}{hint}")
+}
+
 /// Один шаг screen sync: захват → извлечение цветов → отправка SC-кадра.
 fn sync_step(state: &mut State, events_tx: &Sender<WorkerEvent>) {
     // Захватчик создаётся лениво — ScreenCaptureKit может требовать разрешение.
@@ -413,8 +430,9 @@ fn sync_step(state: &mut State, events_tx: &Sender<WorkerEvent>) {
             Err(e) => {
                 if !state.sync_error_reported {
                     state.sync_error_reported = true;
-                    let _ = events_tx.send(WorkerEvent::Error(format!(
-                        "Screen sync недоступен: {e}"
+                    let _ = events_tx.send(WorkerEvent::Error(sync_error_message(
+                        "Screen sync недоступен",
+                        &e,
                     )));
                 }
                 return;
@@ -428,7 +446,10 @@ fn sync_step(state: &mut State, events_tx: &Sender<WorkerEvent>) {
         Err(e) => {
             if !state.sync_error_reported {
                 state.sync_error_reported = true;
-                let _ = events_tx.send(WorkerEvent::Error(format!("Ошибка захвата экрана: {e}")));
+                let _ = events_tx.send(WorkerEvent::Error(sync_error_message(
+                    "Ошибка захвата экрана",
+                    &e,
+                )));
             }
             return;
         }
