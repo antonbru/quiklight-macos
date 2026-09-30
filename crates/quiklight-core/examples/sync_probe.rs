@@ -37,7 +37,11 @@ fn main() {
         .and_then(|raw| Device::parse_rb_response(&raw).ok())
         .and_then(|frame| quiklight_core::hid::device_info::parse_device_info(&frame));
     let led_count = info.as_ref().map(|i| i.led_count as usize).unwrap_or(51);
-    println!("sync_probe: LED = {led_count}, прошивка = {}", info.map(|i| i.firmware_string()).unwrap_or_else(|| "?".into()));
+    println!(
+        "sync_probe: LED = {led_count}, прошивка = {}",
+        info.map(|i| i.firmware_string())
+            .unwrap_or_else(|| "?".into())
+    );
 
     // Градиент: цвет плавно идёт по кругу (красный → зелёный → синий → красный).
     let grad = |phase: f32| -> Vec<u8> {
@@ -60,7 +64,11 @@ fn main() {
 
     // Кадр 1: градиент от красного.
     let p1 = grad(0.0);
-    println!("sync_probe: шлю SC-кадр 1 ({} байт payload, {} HID-отчётов)", p1.len(), (frame_len(&p1) + 62) / 63);
+    println!(
+        "sync_probe: шлю SC-кадр 1 ({} байт payload, {} HID-отчётов)",
+        p1.len(),
+        (frame_len(&p1) + 62) / 63
+    );
     send(&mut dev, &p1).expect("кадр 1");
 
     std::thread::sleep(std::time::Duration::from_secs(2));

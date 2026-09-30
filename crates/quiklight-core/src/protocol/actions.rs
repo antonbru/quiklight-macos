@@ -59,7 +59,10 @@ pub fn turn_off(id: u8) -> Vec<u8> {
 /// Аргумент `brightness` — **0..100**. Протокол не принимает значения больше 100;
 /// минимум в SyncRGB ограничен 5, но панель принимает 0..100.
 pub fn set_brightness(id: u8, brightness: u8) -> Vec<u8> {
-    assert!(brightness <= 100, "яркость должна быть в 0..100, получено {brightness}");
+    assert!(
+        brightness <= 100,
+        "яркость должна быть в 0..100, получено {brightness}"
+    );
     rb_frame(id, action::SET_BRIGHTNESS, &[brightness]).with_checksum()
 }
 
@@ -75,7 +78,10 @@ pub fn set_led_effect(id: u8, effect_type: u8, index: u8) -> Vec<u8> {
 ///
 /// Принимает «пользовательскую» скорость 0..100 и сам инвертирует.
 pub fn set_dynamic_speed(id: u8, user_speed: u8) -> Vec<u8> {
-    assert!(user_speed <= 100, "скорость должна быть в 0..100, получено {user_speed}");
+    assert!(
+        user_speed <= 100,
+        "скорость должна быть в 0..100, получено {user_speed}"
+    );
     let device_speed = 100_u8.saturating_sub(user_speed);
     rb_frame(id, action::SET_DYNAMIC_SPEED, &[device_speed]).with_checksum()
 }
@@ -117,7 +123,10 @@ mod tests {
     fn brightness_50() {
         // Эталон из PROTOCOL.md (пересчитан программно формулой):
         // 52 42 07 02 87 32 56
-        assert_eq!(set_brightness(2, 50), vec![0x52, 0x42, 0x07, 0x02, 0x87, 0x32, 0x56]);
+        assert_eq!(
+            set_brightness(2, 50),
+            vec![0x52, 0x42, 0x07, 0x02, 0x87, 0x32, 0x56]
+        );
     }
 
     #[test]
@@ -139,7 +148,10 @@ mod tests {
     fn read_info() {
         // Пустой payload → size = 6 (формула из PROTOCOL.md: полный размер кадра).
         // В PROTOCOL.md ошибочно указан 0x05 — см. предупреждение в доке.
-        assert_eq!(read_device_info(2), vec![0x52, 0x42, 0x06, 0x02, 0x82, 0x1E]);
+        assert_eq!(
+            read_device_info(2),
+            vec![0x52, 0x42, 0x06, 0x02, 0x82, 0x1E]
+        );
     }
 
     #[test]

@@ -59,7 +59,12 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             led_count: 0, // авто — из устройства
-            layout: EdgeLayout { left: 0, top: 0, right: 0, bottom: 0 },
+            layout: EdgeLayout {
+                left: 0,
+                top: 0,
+                right: 0,
+                bottom: 0,
+            },
             fps: 30,
             gamma: 1.0,
             saturation: 1.0,
@@ -128,7 +133,10 @@ pub enum Command {
 #[derive(Debug, Clone)]
 pub enum WorkerEvent {
     /// Устройство подключено/отключено (+ информация, если есть).
-    DeviceChanged { connected: bool, info: Option<DeviceInfo> },
+    DeviceChanged {
+        connected: bool,
+        info: Option<DeviceInfo>,
+    },
     /// Режим изменился (подтверждение).
     ModeChanged(Mode),
     /// Ошибка (например, нет разрешения «Запись экрана»).
@@ -138,7 +146,10 @@ pub enum WorkerEvent {
 }
 
 /// Запустить фоновый поток.
-pub fn spawn(cmd_rx: Receiver<Command>, events_tx: Sender<WorkerEvent>) -> std::thread::JoinHandle<()> {
+pub fn spawn(
+    cmd_rx: Receiver<Command>,
+    events_tx: Sender<WorkerEvent>,
+) -> std::thread::JoinHandle<()> {
     std::thread::Builder::new()
         .name("quiklight-worker".into())
         .spawn(move || run(cmd_rx, events_tx))
@@ -345,7 +356,10 @@ fn turn_off_and_report(state: &mut State, events_tx: &Sender<WorkerEvent>) {
     if let Some(device) = state.device.as_mut() {
         if let Err(e) = turn_off_all(device) {
             state.device = None;
-            let _ = events_tx.send(WorkerEvent::DeviceChanged { connected: false, info: None });
+            let _ = events_tx.send(WorkerEvent::DeviceChanged {
+                connected: false,
+                info: None,
+            });
             let _ = events_tx.send(WorkerEvent::Error(format!("Устройство отключилось: {e}")));
         }
     }
@@ -366,7 +380,10 @@ fn device_or_reconnect<'a>(
         match Device::open_first(&api) {
             Ok(device) => {
                 state.device = Some(device);
-                let _ = events_tx.send(WorkerEvent::DeviceChanged { connected: true, info: None });
+                let _ = events_tx.send(WorkerEvent::DeviceChanged {
+                    connected: true,
+                    info: None,
+                });
             }
             Err(_) => return None,
         }
@@ -377,8 +394,13 @@ fn device_or_reconnect<'a>(
 /// Устройство перестало отвечать: закрыть дескриптор и сообщить в UI.
 fn device_lost(state: &mut State, events_tx: &Sender<WorkerEvent>, error: &DeviceError) {
     state.device = None;
-    let _ = events_tx.send(WorkerEvent::DeviceChanged { connected: false, info: None });
-    let _ = events_tx.send(WorkerEvent::Error(format!("Устройство отключилось: {error}")));
+    let _ = events_tx.send(WorkerEvent::DeviceChanged {
+        connected: false,
+        info: None,
+    });
+    let _ = events_tx.send(WorkerEvent::Error(format!(
+        "Устройство отключилось: {error}"
+    )));
 }
 
 /// Прочитать информацию об устройстве и сообщить о подключении.
@@ -393,10 +415,16 @@ fn report_device(state: &mut State, events_tx: &Sender<WorkerEvent>) {
                 .and_then(|frame| quiklight_core::hid::device_info::parse_device_info(&frame));
             // Запоминаем фактическое число LED — для авто-раскладки screen sync.
             state.device_led = info.as_ref().map(|i| u16::from(i.led_count));
-            let _ = events_tx.send(WorkerEvent::DeviceChanged { connected: true, info });
+            let _ = events_tx.send(WorkerEvent::DeviceChanged {
+                connected: true,
+                info,
+            });
         }
         None => {
-            let _ = events_tx.send(WorkerEvent::DeviceChanged { connected: false, info: None });
+            let _ = events_tx.send(WorkerEvent::DeviceChanged {
+                connected: false,
+                info: None,
+            });
         }
     }
 }
@@ -440,7 +468,9 @@ fn sync_step(state: &mut State, events_tx: &Sender<WorkerEvent>) {
         }
     }
 
-    let Some(capturer) = state.capturer.as_ref() else { return };
+    let Some(capturer) = state.capturer.as_ref() else {
+        return;
+    };
     let frame = match capturer.capture_frame() {
         Ok(frame) => frame,
         Err(e) => {
@@ -457,9 +487,13 @@ fn sync_step(state: &mut State, events_tx: &Sender<WorkerEvent>) {
     state.sync_error_reported = false;
 
     let layout = state.settings.layout_effective(state.device_led);
-    let colors = state
-        .extractor
-        .extract(&frame.data, frame.pitch as u32, frame.width, frame.height, &layout);
+    let colors = state.extractor.extract(
+        &frame.data,
+        frame.pitch as u32,
+        frame.width,
+        frame.height,
+        &layout,
+    );
 
     // SC-кадр: action 0x80, payload — цвета RGB подряд.
     let mut payload = Vec::with_capacity(colors.len() * 3);
@@ -516,14 +550,22 @@ fn led_heights(layout: &EdgeLayout) -> Vec<f64> {
     // Левый край: LED 0 — нижний угол (0), последний — верхний (1).
     let left = layout.left as usize;
     for k in 0..left {
-        heights.push(if left > 1 { k as f64 / (left - 1) as f64 } else { 0.0 });
+        heights.push(if left > 1 {
+            k as f64 / (left - 1) as f64
+        } else {
+            0.0
+        });
     }
     // Верх — вся сторона на высоте 1.
     heights.extend(std::iter::repeat_n(1.0, layout.top as usize));
     // Правый край: LED 0 — верхний угол (1), последний — нижний (0).
     let right = layout.right as usize;
     for k in 0..right {
-        heights.push(if right > 1 { 1.0 - k as f64 / (right - 1) as f64 } else { 0.0 });
+        heights.push(if right > 1 {
+            1.0 - k as f64 / (right - 1) as f64
+        } else {
+            0.0
+        });
     }
     // Низ — вся сторона на высоте 0.
     heights.extend(std::iter::repeat_n(0.0, layout.bottom as usize));
@@ -591,7 +633,11 @@ fn fire_gradient(heat: f64) -> (u8, u8, u8) {
     let (t0, (r0, g0, b0)) = STOPS[i];
     let (t1, (r1, g1, b1)) = STOPS[i + 1];
     let span = t1 - t0;
-    let k = if span <= f64::EPSILON { 0.0 } else { ((heat - t0) / span).clamp(0.0, 1.0) };
+    let k = if span <= f64::EPSILON {
+        0.0
+    } else {
+        ((heat - t0) / span).clamp(0.0, 1.0)
+    };
     (
         (f64::from(r0) + (f64::from(r1) - f64::from(r0)) * k).round() as u8,
         (f64::from(g0) + (f64::from(g1) - f64::from(g0)) * k).round() as u8,
@@ -631,7 +677,12 @@ mod tests {
     #[test]
     fn layout_manual_wins() {
         let mut s = Settings::default();
-        s.layout = EdgeLayout { left: 5, top: 10, right: 5, bottom: 0 };
+        s.layout = EdgeLayout {
+            left: 5,
+            top: 10,
+            right: 5,
+            bottom: 0,
+        };
         assert_eq!(s.layout_effective(Some(51)).total(), 20);
     }
 
@@ -650,7 +701,12 @@ mod tests {
 
     #[test]
     fn led_heights_follow_wire_order() {
-        let layout = EdgeLayout { left: 3, top: 2, right: 3, bottom: 2 };
+        let layout = EdgeLayout {
+            left: 3,
+            top: 2,
+            right: 3,
+            bottom: 2,
+        };
         let h = led_heights(&layout);
         assert_eq!(h.len(), 10);
         // Левый край: снизу вверх 0 → 0.5 → 1.
@@ -666,7 +722,12 @@ mod tests {
     #[test]
     fn led_heights_single_led_edges() {
         // Сторона из одного LED не должна делить на ноль.
-        let layout = EdgeLayout { left: 1, top: 1, right: 1, bottom: 0 };
+        let layout = EdgeLayout {
+            left: 1,
+            top: 1,
+            right: 1,
+            bottom: 0,
+        };
         let h = led_heights(&layout);
         assert_eq!(h, vec![0.0, 1.0, 0.0]);
     }
@@ -697,7 +758,10 @@ mod tests {
             for phase in [0.0, 0.8, 2.1] {
                 let (r, g, b) = fire_color(0.0, t, phase);
                 assert!(r >= g && g >= b, "t={t} phase={phase}: ({r},{g},{b})");
-                assert!(r >= 200, "у низа пламя должно быть ярко-оранжевым: t={t} phase={phase} → ({r},{g},{b})");
+                assert!(
+                    r >= 200,
+                    "у низа пламя должно быть ярко-оранжевым: t={t} phase={phase} → ({r},{g},{b})"
+                );
             }
         }
     }
@@ -715,6 +779,9 @@ mod tests {
                 }
             }
         }
-        assert!(changed >= 6, "пламя почти не мерцает: изменений {changed}/12");
+        assert!(
+            changed >= 6,
+            "пламя почти не мерцает: изменений {changed}/12"
+        );
     }
 }

@@ -14,8 +14,8 @@ use hidapi::HidApi;
 use quiklight_core::hid::device::{Device, DeviceError};
 use quiklight_core::hid::device_info::parse_device_info;
 use quiklight_core::protocol::actions::{
-    read_device_info, set_brightness, set_dynamic_speed, set_led_effect, set_section_led,
-    turn_off, LED_END,
+    read_device_info, set_brightness, set_dynamic_speed, set_led_effect, set_section_led, turn_off,
+    LED_END,
 };
 
 /// Коды выхода для CLI.
@@ -224,7 +224,10 @@ fn cmd_speed(api: &HidApi, args: &[String]) -> Result<(), DeviceError> {
     // set_dynamic_speed уже инвертирует: пользовательская скорость → устройству.
     let frame = set_dynamic_speed(id, val);
     let _response = dev.write_with_response(&frame)?;
-    println!("Скорость {val} установлена (на устройство ушло {}).", 100 - val);
+    println!(
+        "Скорость {val} установлена (на устройство ушло {}).",
+        100 - val
+    );
     Ok(())
 }
 

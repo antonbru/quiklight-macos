@@ -47,7 +47,10 @@ impl Frame {
 pub fn rb_frame(id: u8, action: u8, payload: &[u8]) -> Frame {
     // Полный размер: 'R'(1) + 'B'(1) + size(1) + id(1) + action(1) + payload + checksum(1)
     let size = 6 + payload.len();
-    assert!(size <= 255, "RB-кадр не может превышать 255 байт (size — 1 байт)");
+    assert!(
+        size <= 255,
+        "RB-кадр не может превышать 255 байт (size — 1 байт)"
+    );
     let mut bytes = Vec::with_capacity(size);
     bytes.push(marker::RB[0]);
     bytes.push(marker::RB[1]);
@@ -57,7 +60,10 @@ pub fn rb_frame(id: u8, action: u8, payload: &[u8]) -> Frame {
     bytes.extend_from_slice(payload);
     let checksum_pos = bytes.len();
     bytes.push(0); // сюда запишется checksum
-    Frame { bytes, checksum_pos }
+    Frame {
+        bytes,
+        checksum_pos,
+    }
 }
 
 /// Построить SC-кадр (без checksum). Используется для передачи цветов экрана
@@ -77,7 +83,10 @@ pub fn sc_frame(id: u8, action: u8, payload: &[u8]) -> Frame {
     bytes.extend_from_slice(payload);
     let checksum_pos = bytes.len();
     bytes.push(0);
-    Frame { bytes, checksum_pos }
+    Frame {
+        bytes,
+        checksum_pos,
+    }
 }
 
 /// Разбить кадр на HID-отчёты по 64 байта, каждый начинается с report ID `0x00`.
@@ -139,7 +148,10 @@ mod tests {
     fn rb_frame_all_red() {
         // 52 42 0B 02 86 01 FF 00 00 FE 25
         let frame = rb_frame(2, 0x86, &[1, 0xFF, 0, 0, 0xFE]).with_checksum();
-        assert_eq!(frame, vec![0x52, 0x42, 0x0B, 0x02, 0x86, 0x01, 0xFF, 0x00, 0x00, 0xFE, 0x25]);
+        assert_eq!(
+            frame,
+            vec![0x52, 0x42, 0x0B, 0x02, 0x86, 0x01, 0xFF, 0x00, 0x00, 0xFE, 0x25]
+        );
         assert!(verify_checksum(&frame));
     }
 

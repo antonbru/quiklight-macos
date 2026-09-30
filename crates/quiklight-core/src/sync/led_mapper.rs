@@ -31,7 +31,12 @@ impl EdgeLayout {
     /// (left → top → right), чтобы сумма совпала с `led_count` в точности.
     pub fn default_for(led_count: u16) -> Self {
         if led_count == 0 {
-            return Self { left: 0, top: 0, right: 0, bottom: 0 };
+            return Self {
+                left: 0,
+                top: 0,
+                right: 0,
+                bottom: 0,
+            };
         }
         // Эталон: 17 лево, 29 верх, 17 право (всего 63).
         let mut layout = Self {
@@ -75,7 +80,10 @@ pub struct EdgeColors {
 
 impl EdgeColors {
     pub fn is_empty(&self) -> bool {
-        self.left.is_empty() && self.top.is_empty() && self.right.is_empty() && self.bottom.is_empty()
+        self.left.is_empty()
+            && self.top.is_empty()
+            && self.right.is_empty()
+            && self.bottom.is_empty()
     }
 }
 
@@ -174,7 +182,10 @@ mod tests {
         // 2 сегмента → 4 LED: 0,0,1,1 (ближайший по позиции).
         let src = vec![(255, 0, 0), (0, 0, 255)];
         let out = interpolate(&src, 4);
-        assert_eq!(out, vec![(255, 0, 0), (255, 0, 0), (0, 0, 255), (0, 0, 255)]);
+        assert_eq!(
+            out,
+            vec![(255, 0, 0), (255, 0, 0), (0, 0, 255), (0, 0, 255)]
+        );
     }
 
     #[test]
@@ -194,9 +205,14 @@ mod tests {
     #[test]
     fn wire_order_matches_synclight() {
         // Лента 1+2+1 (без низа): левый край 1 LED (нижний угол), верх 2, правый 1.
-        let layout = EdgeLayout { left: 1, top: 2, right: 1, bottom: 0 };
+        let layout = EdgeLayout {
+            left: 1,
+            top: 2,
+            right: 1,
+            bottom: 0,
+        };
         let edges = EdgeColors {
-            left: vec![(1, 0, 0)],        // экранный порядок: сверху вниз
+            left: vec![(1, 0, 0)],           // экранный порядок: сверху вниз
             top: vec![(0, 2, 0), (0, 3, 0)], // слева направо
             right: vec![(4, 0, 0)],
             bottom: vec![],
@@ -209,7 +225,12 @@ mod tests {
     #[test]
     fn wire_order_reverses_left_and_bottom() {
         // Проверка реверса левого и нижнего краёв.
-        let layout = EdgeLayout { left: 3, top: 0, right: 0, bottom: 2 };
+        let layout = EdgeLayout {
+            left: 3,
+            top: 0,
+            right: 0,
+            bottom: 2,
+        };
         let edges = EdgeColors {
             left: vec![(1, 0, 0), (2, 0, 0), (3, 0, 0)], // экран: верх→низ
             top: vec![],
@@ -218,7 +239,10 @@ mod tests {
         };
         let out = map_to_leds(&edges, &layout);
         // Левый: низ→верх = 3,2,1; низ: право→лево = 5,4.
-        assert_eq!(out, vec![(3, 0, 0), (2, 0, 0), (1, 0, 0), (5, 0, 0), (4, 0, 0)]);
+        assert_eq!(
+            out,
+            vec![(3, 0, 0), (2, 0, 0), (1, 0, 0), (5, 0, 0), (4, 0, 0)]
+        );
     }
 
     #[test]

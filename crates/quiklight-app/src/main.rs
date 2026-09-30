@@ -17,11 +17,11 @@ use objc2::{define_class, msg_send, sel, DefinedClass, MainThreadMarker, MainThr
 
 use block2::RcBlock;
 use objc2_app_kit::{
-    NSAlert, NSApplication, NSApplicationActivationPolicy, NSBackingStoreType, NSBezierPath, NSButton,
-    NSButtonType, NSCellImagePosition, NSColor, NSControl, NSControlStateValueOff,
-    NSControlStateValueOn, NSImage, NSImageScaling, NSMenu, NSMenuItem, NSSlider, NSStepper,
-    NSStatusBar, NSStatusItem, NSSwitch, NSTextField, NSVariableStatusItemLength, NSView,
-    NSWindow, NSWindowStyleMask,
+    NSAlert, NSApplication, NSApplicationActivationPolicy, NSBackingStoreType, NSBezierPath,
+    NSButton, NSButtonType, NSCellImagePosition, NSColor, NSControl, NSControlStateValueOff,
+    NSControlStateValueOn, NSImage, NSImageScaling, NSMenu, NSMenuItem, NSSlider, NSStatusBar,
+    NSStatusItem, NSStepper, NSSwitch, NSTextField, NSVariableStatusItemLength, NSView, NSWindow,
+    NSWindowStyleMask,
 };
 use objc2_core_foundation::CGFloat;
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString, NSTimer};
@@ -378,23 +378,39 @@ impl AppDelegate {
 
         // Переключатель подсветки.
         if let Some(sw) = self.ivars().power_switch.borrow().clone() {
-            sw.setState(if power { NSControlStateValueOn } else { NSControlStateValueOff });
+            sw.setState(if power {
+                NSControlStateValueOn
+            } else {
+                NSControlStateValueOff
+            });
         }
 
         // Радио-пункты режимов.
         let mode = self.ivars().mode.get();
         for (m, item) in self.ivars().mode_items.borrow().iter() {
-            item.setState(if *m == mode { NSControlStateValueOn } else { NSControlStateValueOff });
+            item.setState(if *m == mode {
+                NSControlStateValueOn
+            } else {
+                NSControlStateValueOff
+            });
         }
         // Пункт «Эффекты» (родитель подменю) — радио-пункт той же группы.
         if let Some(item) = self.ivars().effects_menu_item.borrow().clone() {
             let on = matches!(mode, Mode::Effects(..) | Mode::Fireplace);
-            item.setState(if on { NSControlStateValueOn } else { NSControlStateValueOff });
+            item.setState(if on {
+                NSControlStateValueOn
+            } else {
+                NSControlStateValueOff
+            });
         }
         // Радио-пункты эффектов.
         if let Mode::Effects(tipo, index) = mode {
             for (t, i, item) in self.ivars().effect_items.borrow().iter() {
-                item.setState(if *t == tipo && *i == index { NSControlStateValueOn } else { NSControlStateValueOff });
+                item.setState(if *t == tipo && *i == index {
+                    NSControlStateValueOn
+                } else {
+                    NSControlStateValueOff
+                });
             }
         } else {
             for (_, _, item) in self.ivars().effect_items.borrow().iter() {
@@ -403,7 +419,11 @@ impl AppDelegate {
         }
         // Пункт «Камин» — своё место в той же группе радио-пунктов.
         if let Some(item) = self.ivars().fireplace_item.borrow().clone() {
-            item.setState(if mode == Mode::Fireplace { NSControlStateValueOn } else { NSControlStateValueOff });
+            item.setState(if mode == Mode::Fireplace {
+                NSControlStateValueOn
+            } else {
+                NSControlStateValueOff
+            });
         }
 
         // Палитра: кольцо вокруг текущего пресета (только в режиме статичного цвета).
@@ -422,7 +442,8 @@ impl AppDelegate {
 
     /// Построить menu bar: статус-пункт + меню.
     fn build_ui(&self, mtm: MainThreadMarker) {
-        let status_item = NSStatusBar::systemStatusBar().statusItemWithLength(NSVariableStatusItemLength);
+        let status_item =
+            NSStatusBar::systemStatusBar().statusItemWithLength(NSVariableStatusItemLength);
         status_item.setMenu(Some(&self.build_menu(mtm)));
         *self.ivars().status_item.borrow_mut() = Some(status_item);
         self.update_ui();
@@ -440,10 +461,16 @@ impl AppDelegate {
         // Подсветка — переключатель (не пункт меню).
         let switch_item = NSMenuItem::new(mtm);
         let switch_view = NSView::new(mtm);
-        switch_view.setFrame(NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(136.0, 24.0)));
+        switch_view.setFrame(NSRect::new(
+            NSPoint::new(0.0, 0.0),
+            NSSize::new(136.0, 24.0),
+        ));
         switch_view.addSubview(&label("Подсветка", 8.0, 3.0, 80.0, mtm));
         let sw = NSSwitch::new(mtm);
-        sw.setFrame(NSRect::new(NSPoint::new(94.0, 1.0), NSSize::new(38.0, 22.0)));
+        sw.setFrame(NSRect::new(
+            NSPoint::new(94.0, 1.0),
+            NSSize::new(38.0, 22.0),
+        ));
         sw.setState(NSControlStateValueOff);
         control_action(&sw, self, sel!(togglePower:));
         switch_view.addSubview(&sw);
@@ -481,7 +508,13 @@ impl AppDelegate {
         let effects_menu = NSMenu::new(mtm);
         let mut effect_items = Vec::new();
         let effect_names = [
-            "Эффект 0", "Эффект 1", "Эффект 2", "Эффект 3", "Эффект 4", "Эффект 5", "Эффект 6",
+            "Эффект 0",
+            "Эффект 1",
+            "Эффект 2",
+            "Эффект 3",
+            "Эффект 4",
+            "Эффект 5",
+            "Эффект 6",
         ];
         for (tipo, label) in [(2u8, "Динамика"), (3u8, "Звук")] {
             if tipo == 3 {
@@ -489,7 +522,13 @@ impl AppDelegate {
             }
             for (idx, name) in effect_names.iter().enumerate() {
                 let tag = isize::from(tipo) * 100 + idx as isize;
-                let item = action_item(&format!("{label} — {name}"), tag, sel!(setEffect:), self, mtm);
+                let item = action_item(
+                    &format!("{label} — {name}"),
+                    tag,
+                    sel!(setEffect:),
+                    self,
+                    mtm,
+                );
                 effects_menu.addItem(&item);
                 effect_items.push((tipo, idx as u8, item));
             }
@@ -497,7 +536,8 @@ impl AppDelegate {
 
         // Свой эффект «Камин» — плавно мерцающее пламя (рисует сам движок).
         effects_menu.addItem(&NSMenuItem::separatorItem(mtm));
-        let fireplace_item = action_item("Камин", TAG_EFFECT_FIREPLACE, sel!(setEffect:), self, mtm);
+        let fireplace_item =
+            action_item("Камин", TAG_EFFECT_FIREPLACE, sel!(setEffect:), self, mtm);
         effects_menu.addItem(&fireplace_item);
         *self.ivars().fireplace_item.borrow_mut() = Some(fireplace_item);
 
@@ -512,7 +552,10 @@ impl AppDelegate {
         // Яркость — слайдер внутри пункта меню.
         let brightness_item = NSMenuItem::new(mtm);
         let slider = NSSlider::new(mtm);
-        slider.setFrame(NSRect::new(NSPoint::new(10.0, 6.0), NSSize::new(160.0, 24.0)));
+        slider.setFrame(NSRect::new(
+            NSPoint::new(10.0, 6.0),
+            NSSize::new(160.0, 24.0),
+        ));
         slider.setMinValue(0.0);
         slider.setMaxValue(100.0);
         slider.setDoubleValue(f64::from(self.ivars().brightness.get()));
@@ -539,27 +582,50 @@ impl AppDelegate {
 
     fn build_settings_panel(&self, mtm: MainThreadMarker) -> SettingsPanel {
         let content = NSView::new(mtm);
-        content.setFrame(NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(400.0, 470.0)));
+        content.setFrame(NSRect::new(
+            NSPoint::new(0.0, 0.0),
+            NSSize::new(400.0, 470.0),
+        ));
 
         // Заголовок.
         content.addSubview(&label("Настройки QuikLight", 12.0, 440.0, 380.0, mtm));
 
         // Число LED (0 = авто — из устройства).
         content.addSubview(&label("Число LED (0 = авто)", 12.0, 408.0, 160.0, mtm));
-        let (led_field, led_stepper) = stepper_row(&content, 1, 0.0, 0.0, 500.0, 160.0, 408.0, self, mtm);
+        let (led_field, led_stepper) =
+            stepper_row(&content, 1, 0.0, 0.0, 500.0, 160.0, 408.0, self, mtm);
 
         // Раскладка.
-        content.addSubview(&label("Раскладка (0 = авто 17/29/17)", 12.0, 374.0, 300.0, mtm));
-        let (top_field, top_stepper) = stepper_row(&content, 2, 29.0, 0.0, 200.0, 140.0, 340.0, self, mtm);
-        let (left_field, left_stepper) = stepper_row(&content, 3, 17.0, 0.0, 200.0, 140.0, 308.0, self, mtm);
-        let (right_field, right_stepper) = stepper_row(&content, 4, 17.0, 0.0, 200.0, 140.0, 276.0, self, mtm);
+        content.addSubview(&label(
+            "Раскладка (0 = авто 17/29/17)",
+            12.0,
+            374.0,
+            300.0,
+            mtm,
+        ));
+        let (top_field, top_stepper) =
+            stepper_row(&content, 2, 29.0, 0.0, 200.0, 140.0, 340.0, self, mtm);
+        let (left_field, left_stepper) =
+            stepper_row(&content, 3, 17.0, 0.0, 200.0, 140.0, 308.0, self, mtm);
+        let (right_field, right_stepper) =
+            stepper_row(&content, 4, 17.0, 0.0, 200.0, 140.0, 276.0, self, mtm);
         // Пометки к степперам (над каждым рядом).
         for (title, y) in [("Верх:", 340.0), ("Лево:", 308.0), ("Право:", 276.0)] {
             content.addSubview(&label(title, 12.0, y + 4.0, 90.0, mtm));
         }
 
         // FPS / гамма / насыщенность.
-        let fps_row = slider_row(&content, 5, "FPS (screen sync)", 20.0, 60.0, 30.0, 240.0, self, mtm);
+        let fps_row = slider_row(
+            &content,
+            5,
+            "FPS (screen sync)",
+            20.0,
+            60.0,
+            30.0,
+            240.0,
+            self,
+            mtm,
+        );
         let gamma_row = slider_row(&content, 6, "Гамма", 0.5, 2.5, 1.0, 206.0, self, mtm);
         let sat_row = slider_row(&content, 7, "Насыщенность", 0.0, 2.0, 1.0, 172.0, self, mtm);
 
@@ -572,20 +638,28 @@ impl AppDelegate {
         let apply = NSButton::new(mtm);
         apply.setTitle(&NSString::from_str("Применить и закрыть"));
         control_action(&apply, self, sel!(applySettings:));
-        apply.setFrame(NSRect::new(NSPoint::new(210.0, 20.0), NSSize::new(178.0, 30.0)));
+        apply.setFrame(NSRect::new(
+            NSPoint::new(210.0, 20.0),
+            NSSize::new(178.0, 30.0),
+        ));
         content.addSubview(&apply);
 
         let cancel = NSButton::new(mtm);
         cancel.setTitle(&NSString::from_str("Отмена"));
         control_action(&cancel, self, sel!(closeSettings:));
-        cancel.setFrame(NSRect::new(NSPoint::new(12.0, 20.0), NSSize::new(178.0, 30.0)));
+        cancel.setFrame(NSRect::new(
+            NSPoint::new(12.0, 20.0),
+            NSSize::new(178.0, 30.0),
+        ));
         content.addSubview(&cancel);
 
         let window = unsafe {
             NSWindow::initWithContentRect_styleMask_backing_defer(
                 NSWindow::alloc(mtm),
                 NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(400.0, 470.0)),
-                NSWindowStyleMask::Titled | NSWindowStyleMask::Closable | NSWindowStyleMask::Miniaturizable,
+                NSWindowStyleMask::Titled
+                    | NSWindowStyleMask::Closable
+                    | NSWindowStyleMask::Miniaturizable,
                 NSBackingStoreType::Buffered,
                 false,
             )
@@ -623,25 +697,54 @@ impl AppDelegate {
     }
 
     /// Заполнить контролы текущими настройками (при открытии окна).
-    fn refresh_settings_panel(&self, panel: &SettingsPanel) {        let s = self.ivars().settings.get();
+    fn refresh_settings_panel(&self, panel: &SettingsPanel) {
+        let s = self.ivars().settings.get();
         panel.led_stepper.setDoubleValue(f64::from(s.led_count));
         panel.top_stepper.setDoubleValue(f64::from(s.layout.top));
         panel.left_stepper.setDoubleValue(f64::from(s.layout.left));
-        panel.right_stepper.setDoubleValue(f64::from(s.layout.right));
+        panel
+            .right_stepper
+            .setDoubleValue(f64::from(s.layout.right));
         panel.fps_slider.setDoubleValue(f64::from(s.fps));
         panel.gamma_slider.setDoubleValue(f64::from(s.gamma));
         panel.sat_slider.setDoubleValue(f64::from(s.saturation));
-        panel.smooth_check.setState(if s.smoothing { NSControlStateValueOn } else { NSControlStateValueOff });
-        panel.lc_check.setState(if s.light_compression { NSControlStateValueOn } else { NSControlStateValueOff });
-        panel.off_check.setState(if s.turn_off_on_exit { NSControlStateValueOn } else { NSControlStateValueOff });
+        panel.smooth_check.setState(if s.smoothing {
+            NSControlStateValueOn
+        } else {
+            NSControlStateValueOff
+        });
+        panel.lc_check.setState(if s.light_compression {
+            NSControlStateValueOn
+        } else {
+            NSControlStateValueOff
+        });
+        panel.off_check.setState(if s.turn_off_on_exit {
+            NSControlStateValueOn
+        } else {
+            NSControlStateValueOff
+        });
         // Поля значений.
-        panel.led_field.setStringValue(&NSString::from_str(&format!("{}", s.led_count)));
-        panel.top_field.setStringValue(&NSString::from_str(&format!("{}", s.layout.top)));
-        panel.left_field.setStringValue(&NSString::from_str(&format!("{}", s.layout.left)));
-        panel.right_field.setStringValue(&NSString::from_str(&format!("{}", s.layout.right)));
-        panel.fps_field.setStringValue(&NSString::from_str(&format!("{}", s.fps)));
-        panel.gamma_field.setStringValue(&NSString::from_str(&format!("{:.2}", s.gamma)));
-        panel.sat_field.setStringValue(&NSString::from_str(&format!("{:.2}", s.saturation)));
+        panel
+            .led_field
+            .setStringValue(&NSString::from_str(&format!("{}", s.led_count)));
+        panel
+            .top_field
+            .setStringValue(&NSString::from_str(&format!("{}", s.layout.top)));
+        panel
+            .left_field
+            .setStringValue(&NSString::from_str(&format!("{}", s.layout.left)));
+        panel
+            .right_field
+            .setStringValue(&NSString::from_str(&format!("{}", s.layout.right)));
+        panel
+            .fps_field
+            .setStringValue(&NSString::from_str(&format!("{}", s.fps)));
+        panel
+            .gamma_field
+            .setStringValue(&NSString::from_str(&format!("{:.2}", s.gamma)));
+        panel
+            .sat_field
+            .setStringValue(&NSString::from_str(&format!("{:.2}", s.saturation)));
     }
 }
 
@@ -680,13 +783,19 @@ fn preset_palette_row(
     let height = CIRCLE + 6.0;
 
     let view = NSView::new(mtm);
-    view.setFrame(NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width, height)));
+    view.setFrame(NSRect::new(
+        NSPoint::new(0.0, 0.0),
+        NSSize::new(width, height),
+    ));
 
     let mut buttons = Vec::new();
     for (i, (name, r, g, b)) in PRESET_COLORS.iter().enumerate() {
         let x = PAD + i as f64 * (CIRCLE + GAP);
         let btn = NSButton::new(mtm);
-        btn.setFrame(NSRect::new(NSPoint::new(x, 3.0), NSSize::new(CIRCLE, CIRCLE)));
+        btn.setFrame(NSRect::new(
+            NSPoint::new(x, 3.0),
+            NSSize::new(CIRCLE, CIRCLE),
+        ));
         btn.setButtonType(NSButtonType::MomentaryChange);
         btn.setBordered(false);
         btn.setImagePosition(NSCellImagePosition::ImageOnly);
@@ -782,12 +891,18 @@ fn stepper_row(
     mtm: MainThreadMarker,
 ) -> (Retained<NSTextField>, Retained<NSStepper>) {
     let field = value_field(mtm);
-    field.setFrame(NSRect::new(NSPoint::new(x + 80.0, y), NSSize::new(50.0, 22.0)));
+    field.setFrame(NSRect::new(
+        NSPoint::new(x + 80.0, y),
+        NSSize::new(50.0, 22.0),
+    ));
     field.setStringValue(&NSString::from_str(&format!("{value:.0}")));
     content.addSubview(&field);
 
     let stepper = NSStepper::new(mtm);
-    stepper.setFrame(NSRect::new(NSPoint::new(x + 135.0, y - 2.0), NSSize::new(19.0, 27.0)));
+    stepper.setFrame(NSRect::new(
+        NSPoint::new(x + 135.0, y - 2.0),
+        NSSize::new(19.0, 27.0),
+    ));
     stepper.setMinValue(min);
     stepper.setMaxValue(max);
     stepper.setIncrement(1.0);
@@ -816,7 +931,10 @@ fn slider_row(
     content.addSubview(&l);
 
     let slider = NSSlider::new(mtm);
-    slider.setFrame(NSRect::new(NSPoint::new(130.0, y + 2.0), NSSize::new(180.0, 24.0)));
+    slider.setFrame(NSRect::new(
+        NSPoint::new(130.0, y + 2.0),
+        NSSize::new(180.0, 24.0),
+    ));
     slider.setMinValue(min);
     slider.setMaxValue(max);
     slider.setDoubleValue(value);
@@ -839,12 +957,9 @@ fn checkbox(
     _delegate: &AppDelegate,
     mtm: MainThreadMarker,
 ) -> Retained<NSButton> {
-    let cb = unsafe { NSButton::checkboxWithTitle_target_action(
-        &NSString::from_str(title),
-        None,
-        None,
-        mtm,
-    ) };
+    let cb = unsafe {
+        NSButton::checkboxWithTitle_target_action(&NSString::from_str(title), None, None, mtm)
+    };
     cb.setFrame(NSRect::new(NSPoint::new(12.0, y), NSSize::new(300.0, 20.0)));
     cb.setState(NSControlStateValueOn);
     content.addSubview(&cb);
@@ -852,7 +967,11 @@ fn checkbox(
 }
 
 /// Строка статуса для шапки меню.
-fn status_line(connected: bool, info: Option<&quiklight_core::hid::device_info::DeviceInfo>, power: bool) -> String {
+fn status_line(
+    connected: bool,
+    info: Option<&quiklight_core::hid::device_info::DeviceInfo>,
+    power: bool,
+) -> String {
     let state = if power { "вкл" } else { "выкл" };
     match info {
         Some(i) => format!(

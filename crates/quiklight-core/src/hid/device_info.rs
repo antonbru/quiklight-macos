@@ -23,7 +23,10 @@ pub struct DeviceInfo {
 impl DeviceInfo {
     /// Версия прошивки строкой вида `major.minor.patch`.
     pub fn firmware_string(&self) -> String {
-        format!("{}.{}.{}", self.firmware[0], self.firmware[1], self.firmware[2])
+        format!(
+            "{}.{}.{}",
+            self.firmware[0], self.firmware[1], self.firmware[2]
+        )
     }
 
     /// UUID шестнадцатеричной строкой.

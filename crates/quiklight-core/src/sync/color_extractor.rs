@@ -114,7 +114,12 @@ fn row(grid: &[Rgb], cols: u32, r: u32) -> &[Rgb] {
 /// лево/право сверху вниз, верх/низ слева направо.
 pub fn extract_border_colors(grid: &[Rgb], cols: u32, rows: u32) -> EdgeColors {
     if grid.is_empty() || cols == 0 || rows == 0 {
-        return EdgeColors { left: vec![], top: vec![], right: vec![], bottom: vec![] };
+        return EdgeColors {
+            left: vec![],
+            top: vec![],
+            right: vec![],
+            bottom: vec![],
+        };
     }
 
     // Верх: строка 0; если вся чёрная — строка 1.
@@ -134,7 +139,9 @@ pub fn extract_border_colors(grid: &[Rgb], cols: u32, rows: u32) -> EdgeColors {
     };
 
     let left: Vec<Rgb> = (0..rows).map(|r| grid[(r * cols) as usize]).collect();
-    let right: Vec<Rgb> = (0..rows).map(|r| grid[(r * cols + cols - 1) as usize]).collect();
+    let right: Vec<Rgb> = (0..rows)
+        .map(|r| grid[(r * cols + cols - 1) as usize])
+        .collect();
 
     EdgeColors {
         left,
@@ -192,7 +199,11 @@ fn rgb_to_hsl(c: Rgb) -> (f32, f32, f32) {
     }
 
     let d = max - min;
-    let s = if l > 0.5 { d / (2.0 - max - min) } else { d / (max + min) };
+    let s = if l > 0.5 {
+        d / (2.0 - max - min)
+    } else {
+        d / (max + min)
+    };
 
     let h = if max == r {
         (g - b) / d + if g < b { 6.0 } else { 0.0 }
@@ -228,7 +239,11 @@ fn hsl_to_rgb(h: f32, s: f32, l: f32) -> Rgb {
         let v = (l * 255.0).round().clamp(0.0, 255.0) as u8;
         return (v, v, v);
     }
-    let q = if l < 0.5 { l * (1.0 + s) } else { l + s - l * s };
+    let q = if l < 0.5 {
+        l * (1.0 + s)
+    } else {
+        l + s - l * s
+    };
     let p = 2.0 * l - q;
     let r = hue_to_rgb(p, q, h + 1.0 / 3.0);
     let g = hue_to_rgb(p, q, h);
@@ -255,7 +270,12 @@ pub struct PostProcessConfig {
 
 impl Default for PostProcessConfig {
     fn default() -> Self {
-        Self { gamma: 1.0, saturation: 1.0, light_compression: false, smoothing: true }
+        Self {
+            gamma: 1.0,
+            saturation: 1.0,
+            light_compression: false,
+            smoothing: true,
+        }
     }
 }
 
@@ -269,7 +289,12 @@ pub struct ColorExtractor {
 
 impl ColorExtractor {
     pub fn new(config: PostProcessConfig) -> Self {
-        Self { cols: 0, rows: 0, config, history: VecDeque::with_capacity(SMOOTHING_FRAMES + 1) }
+        Self {
+            cols: 0,
+            rows: 0,
+            config,
+            history: VecDeque::with_capacity(SMOOTHING_FRAMES + 1),
+        }
     }
 
     pub fn set_config(&mut self, config: PostProcessConfig) {
@@ -343,7 +368,11 @@ impl ColorExtractor {
                         b += frame[i].2 as u32;
                     }
                 }
-                ((r / n as u32) as u8, (g / n as u32) as u8, (b / n as u32) as u8)
+                (
+                    (r / n as u32) as u8,
+                    (g / n as u32) as u8,
+                    (b / n as u32) as u8,
+                )
             })
             .collect()
     }
@@ -414,7 +443,11 @@ mod tests {
         }
         let edges = extract_border_colors(&grid, 3, 3);
         assert_eq!(edges.top.len(), 3);
-        assert!(edges.top.iter().all(|c| *c == (255, 255, 255)), "верх не чёрный: {:?}", edges.top);
+        assert!(
+            edges.top.iter().all(|c| *c == (255, 255, 255)),
+            "верх не чёрный: {:?}",
+            edges.top
+        );
         assert_eq!(edges.left.len(), 3);
         assert_eq!(edges.right.len(), 3);
         assert_eq!(edges.bottom.len(), 3);
@@ -498,11 +531,16 @@ mod tests {
             }
         }
         let mut ex = ColorExtractor::new(PostProcessConfig::default());
-        let layout = EdgeLayout { left: 4, top: 8, right: 0, bottom: 0 };
+        let layout = EdgeLayout {
+            left: 4,
+            top: 8,
+            right: 0,
+            bottom: 0,
+        };
         let colors = ex.extract(&frame, w * 4, w, h, &layout);
         assert_eq!(colors.len(), 12); // 4 + 8
-        // Первые 4 LED — левый край (снизу вверх): должен быть синим (кроме, возможно,
-        // верхнего угла, где пересекается с зелёным).
+                                      // Первые 4 LED — левый край (снизу вверх): должен быть синим (кроме, возможно,
+                                      // верхнего угла, где пересекается с зелёным).
         let left_leds = &colors[0..4];
         for c in left_leds {
             assert!(c.2 > c.0 && c.2 >= c.1, "ожидаем синеву, got {c:?}");
@@ -522,7 +560,12 @@ mod tests {
             light_compression: false,
             smoothing: true,
         });
-        let layout = EdgeLayout { left: 1, top: 0, right: 0, bottom: 0 };
+        let layout = EdgeLayout {
+            left: 1,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        };
         let (w, h) = (320u32, 180u32);
 
         let frame_with = |color: Rgb| -> Vec<u8> {

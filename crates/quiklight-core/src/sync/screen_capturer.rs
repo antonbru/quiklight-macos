@@ -15,7 +15,9 @@ use objc2::rc::Retained;
 use objc2::runtime::AnyClass;
 use objc2::AnyThread;
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
-use objc2_core_graphics::{CGBitmapContextCreate, CGBitmapInfo, CGColorSpace, CGContext, CGImage, CGImageAlphaInfo};
+use objc2_core_graphics::{
+    CGBitmapContextCreate, CGBitmapInfo, CGColorSpace, CGContext, CGImage, CGImageAlphaInfo,
+};
 use objc2_foundation::{NSArray, NSError};
 use objc2_screen_capture_kit::{
     SCContentFilter, SCDisplay, SCScreenshotManager, SCShareableContent, SCStreamConfiguration,
@@ -94,7 +96,11 @@ impl ScreenCapturer {
         // Фильтр: главный дисплей целиком, без исключённых окон.
         let filter = unsafe {
             let excluded = NSArray::<objc2_screen_capture_kit::SCWindow>::new();
-            SCContentFilter::initWithDisplay_excludingWindows(SCContentFilter::alloc(), &display, &excluded)
+            SCContentFilter::initWithDisplay_excludingWindows(
+                SCContentFilter::alloc(),
+                &display,
+                &excluded,
+            )
         };
         // Конфигурация: уменьшенное разрешение, без курсора.
         let config = unsafe {
@@ -132,9 +138,11 @@ impl ScreenCapturer {
 fn main_display() -> Result<Retained<SCDisplay>, CaptureError> {
     let (tx, rx): (Sender<Result<Retained<SCDisplay>, CaptureError>>, _) = channel();
     unsafe {
-        let block = RcBlock::new(move |content: *mut SCShareableContent, error: *mut NSError| {
-            let _ = tx.send(extract_display(content, error));
-        });
+        let block = RcBlock::new(
+            move |content: *mut SCShareableContent, error: *mut NSError| {
+                let _ = tx.send(extract_display(content, error));
+            },
+        );
         SCShareableContent::getShareableContentExcludingDesktopWindows_onScreenWindowsOnly_completionHandler(
             true,
             false,
@@ -178,7 +186,9 @@ unsafe fn cgimage_to_frame(
         return Err(map_nserror(unsafe { &*error }));
     }
     let Some(cg) = (unsafe { image.as_ref() }) else {
-        return Err(CaptureError::Failed("ScreenCaptureKit вернул пустой CGImage".into()));
+        return Err(CaptureError::Failed(
+            "ScreenCaptureKit вернул пустой CGImage".into(),
+        ));
     };
 
     let w = CGImage::width(Some(cg));
