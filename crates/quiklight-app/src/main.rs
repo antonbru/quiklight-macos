@@ -6,7 +6,9 @@
 
 #![allow(clippy::let_unit_value)]
 
+mod effects;
 mod engine;
+mod settings;
 
 use std::cell::{Cell, RefCell};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -26,7 +28,8 @@ use objc2_app_kit::{
 use objc2_core_foundation::CGFloat;
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString, NSTimer};
 
-use crate::engine::{Command, Mode, Settings, WorkerEvent};
+use crate::engine::{Command, Mode, WorkerEvent};
+use crate::settings::Settings;
 
 // ───────────────────────────── Состояние UI ─────────────────────────────
 
