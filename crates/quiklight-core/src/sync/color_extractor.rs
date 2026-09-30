@@ -18,7 +18,7 @@ pub const SMOOTHING_FRAMES: usize = 10;
 /// Порог «чёрного» края для замены внутренней строкой (канал < порога).
 const BLACK_THRESHOLD: u8 = 10;
 
-type Rgb = (u8, u8, u8);
+pub use crate::color::Rgb;
 
 /// Размер сетки по соотношению сторон экрана (как SyncLight `getAspectRatio`).
 pub fn aspect_grid(width: u32, height: u32) -> (u32, u32) {

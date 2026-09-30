@@ -44,9 +44,12 @@ pub mod action {
 /// Значение `254` = «до конца ленты» (не зависит от фактического числа LED).
 pub const LED_END: u8 = 0xFE;
 
-/// Специальная команда «погасить всё»: `[1, 0, 0, 0, 254]`.
-pub fn turn_off_black() -> Vec<u8> {
-    section_led_payload(&[(1, 0, 0, 0, LED_END)])
+/// Построить RB-кадр «погасить всё» (action 134, payload `[1, 0, 0, 0, 254]`).
+///
+/// Нужен для совместимости со старыми прошивками (< 1.8.0), которые не знают
+/// action 151: см. `docs/PROTOCOL.md`, «Подводные камни», п. 2.
+pub fn set_all_black(id: u8) -> Vec<u8> {
+    set_section_led(id, &[(1, 0, 0, 0, LED_END)])
 }
 
 /// Построить RB-кадр «выключить подсветку» (action 151, payload пустой).
@@ -162,8 +165,12 @@ mod tests {
     }
 
     #[test]
-    fn black_is_turn_off() {
-        // «Погасить всё» = [1,0,0,0,254]
-        assert_eq!(turn_off_black(), vec![1, 0, 0, 0, LED_END]);
+    fn set_all_black_frame() {
+        // «Погасить всё» = payload [1,0,0,0,254] в кадре action 134.
+        // checksum пересчитан программно формулой из PROTOCOL.md.
+        assert_eq!(
+            set_all_black(2),
+            vec![0x52, 0x42, 0x0B, 0x02, 0x86, 0x01, 0x00, 0x00, 0x00, 0xFE, 0x26]
+        );
     }
 }

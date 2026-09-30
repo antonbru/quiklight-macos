@@ -6,6 +6,7 @@
 //! Без UI: только протокол (`protocol`) и работа с устройством (`hid`).
 //! Полное описание протокола — в `docs/PROTOCOL.md`.
 
+pub mod color;
 pub mod hid;
 pub mod protocol;
 pub mod sync;

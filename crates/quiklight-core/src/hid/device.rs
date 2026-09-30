@@ -3,8 +3,12 @@
 //!
 //! См. `docs/PROTOCOL.md` — «Передача по HID» и «Идентификация устройства».
 
-use crate::protocol::packet::{chunk_to_hid_reports, HID_REPORT_SIZE};
+use std::time::Duration;
+
 use hidapi::{HidApi, HidDevice};
+
+use crate::protocol::actions::{action, set_all_black, turn_off};
+use crate::protocol::packet::{chunk_to_hid_reports, sc_frame, HID_REPORT_SIZE};
 
 /// Vendor ID панели QuikLight: `0x1A86` (QinHeng/WCH).
 pub const VENDOR_ID: u16 = 0x1A86;
@@ -15,6 +19,11 @@ pub const PRODUCT_ID: u16 = 0xFE07;
 pub const RESPONSE_DELAY_MS: u64 = 200;
 /// Таймаут чтения для команд с ответом (мс).
 pub const READ_TIMEOUT_MS: i32 = 500;
+
+/// Сколько раз повторять action 151 при выключении (PROTOCOL.md, п. 3).
+pub const TURN_OFF_REPEATS: u32 = 4;
+/// Пауза между повторами выключения (мс).
+pub const TURN_OFF_INTERVAL_MS: u64 = 20;
 
 /// Ошибка работы с устройством.
 #[derive(Debug)]
@@ -55,7 +64,7 @@ impl std::fmt::Display for DeviceError {
 impl std::error::Error for DeviceError {}
 
 /// Следующий id сессии: монотонно растёт, после 255 возвращается к 1.
-pub fn next_session(current: u8) -> u8 {
+fn next_session(current: u8) -> u8 {
     match current {
         255 => 1,
         _ => current + 1,
@@ -115,6 +124,30 @@ impl Device {
         let id = self.session_id;
         self.session_id = next_session(self.session_id);
         id
+    }
+
+    /// Погасить подсветку: action 151 ×4 с паузами + «всё чёрным» для старых
+    /// прошивок (см. `docs/PROTOCOL.md`, «Подводные камни», п. 2–3).
+    ///
+    /// Единый сценарий выключения для приложения, `hidprobe` и `sync_probe`.
+    pub fn turn_off_all(&mut self) -> Result<(), DeviceError> {
+        for _ in 0..TURN_OFF_REPEATS {
+            let id = self.next_session_id();
+            self.write_frame(&turn_off(id))?;
+            std::thread::sleep(Duration::from_millis(TURN_OFF_INTERVAL_MS));
+        }
+        let id = self.next_session_id();
+        self.write_frame(&set_all_black(id))
+    }
+
+    /// Отправить SC-кадр screen sync (action 128) с payload цветов RGB.
+    ///
+    /// Единственная точка сборки SC-кадра: маркер `'S','C'`, 16-битный размер
+    /// и порядок `[R,G,B, ...]` заданы в `docs/PROTOCOL.md`.
+    pub fn send_screen_sync(&mut self, payload: &[u8]) -> Result<(), DeviceError> {
+        let id = self.next_session_id();
+        let frame = sc_frame(id, action::SET_SCREEN_SYNC, payload).with_checksum();
+        self.write_frame(&frame)
     }
 
     /// Записать готовый кадр (RB/SC) в устройство, разбивая на HID-отчёты.

@@ -35,6 +35,28 @@ impl DeviceInfo {
     }
 }
 
+/// Запасное число LED, если ответ устройства короче ожидаемого
+/// (стандартная лента 27" — 63 LED; см. `EdgeLayout::default_for`).
+pub const DEFAULT_LED_COUNT: u8 = 63;
+
+/// Смещение идентификатора устройства (`кадр[5..8]`).
+const OFF_DEVICE_ID: usize = 5;
+/// Смещение настроенного размера экрана (`кадр[8]`).
+const OFF_SCREEN_SIZE: usize = 8;
+/// Смещение числа LED (`кадр[11]`).
+const OFF_LED_COUNT: usize = 11;
+/// Смещение UUID (`кадр[12..20]`).
+const OFF_UUID: usize = 12;
+/// Смещение версии прошивки (`кадр[21..24]`).
+const OFF_FIRMWARE: usize = 21;
+/// Минимальная длина кадра для разбора: заголовок + id + action + device_id + screen_size.
+const MIN_FRAME_LEN: usize = OFF_SCREEN_SIZE + 1;
+
+/// Прочитать `N` байт по смещению, подставляя нули для отсутствующего хвоста.
+fn tail_or_zero<const N: usize>(frame: &[u8], offset: usize) -> [u8; N] {
+    std::array::from_fn(|i| frame.get(offset + i).copied().unwrap_or(0))
+}
+
 /// Разобрать RB-ответ на `readDeviceInfo`.
 ///
 /// `frame` — полный RB-кадр (с заголовком и checksum), без report ID.
@@ -42,39 +64,21 @@ impl DeviceInfo {
 ///
 /// Возвращает `None`, если кадр слишком короткий — по PROTOCOL.md смещения
 /// допускают несовпадение длины, поэтому парсер прощает отсутствие хвостовых
-/// полей (uuid/firmware), но требует хотя бы 12 байт кадра (header + id + size).
+/// полей (uuid/firmware), но требует хотя бы [`MIN_FRAME_LEN`] байт кадра.
 pub fn parse_device_info(frame: &[u8]) -> Option<DeviceInfo> {
-    // Нужны: 'R' 'B' size id action (5) + кадр[5..8] id + кадр[8] size → 9 байт.
-    // led_count (кадр[11]) и дальше — опциональны.
-    if frame.len() < 9 {
+    if frame.len() < MIN_FRAME_LEN {
         return None;
     }
 
-    let device_id = [frame[5], frame[6], frame[7]];
-    let screen_size = frame[8];
-    let led_count = frame.get(11).copied().unwrap_or(63);
-    let uuid = [
-        frame.get(12).copied().unwrap_or(0),
-        frame.get(13).copied().unwrap_or(0),
-        frame.get(14).copied().unwrap_or(0),
-        frame.get(15).copied().unwrap_or(0),
-        frame.get(16).copied().unwrap_or(0),
-        frame.get(17).copied().unwrap_or(0),
-        frame.get(18).copied().unwrap_or(0),
-        frame.get(19).copied().unwrap_or(0),
-    ];
-    let firmware = [
-        frame.get(21).copied().unwrap_or(0),
-        frame.get(22).copied().unwrap_or(0),
-        frame.get(23).copied().unwrap_or(0),
-    ];
-
     Some(DeviceInfo {
-        device_id,
-        screen_size,
-        led_count,
-        uuid,
-        firmware,
+        device_id: tail_or_zero(frame, OFF_DEVICE_ID),
+        screen_size: frame[OFF_SCREEN_SIZE],
+        led_count: frame
+            .get(OFF_LED_COUNT)
+            .copied()
+            .unwrap_or(DEFAULT_LED_COUNT),
+        uuid: tail_or_zero(frame, OFF_UUID),
+        firmware: tail_or_zero(frame, OFF_FIRMWARE),
     })
 }
 
@@ -146,7 +150,7 @@ mod tests {
         payload[3] = 24;
         let frame = rb_response(&payload);
         let info = parse_device_info(&frame).expect("должен распарситься");
-        assert_eq!(info.led_count, 63); // дефолт
+        assert_eq!(info.led_count, DEFAULT_LED_COUNT); // дефолт
         assert_eq!(info.uuid, [0; 8]);
         assert_eq!(info.firmware, [0; 3]);
     }

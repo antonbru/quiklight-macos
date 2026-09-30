@@ -11,9 +11,8 @@ use hidapi::HidApi;
 use quiklight_core::hid::device::{Device, DeviceError};
 use quiklight_core::hid::device_info::DeviceInfo;
 use quiklight_core::protocol::actions::{
-    read_device_info, set_brightness, set_led_effect, set_section_led, turn_off, LED_END,
+    read_device_info, set_brightness, set_led_effect, set_section_led, LED_END,
 };
-use quiklight_core::protocol::packet::sc_frame;
 use quiklight_core::sync::color_extractor::{ColorExtractor, PostProcessConfig};
 use quiklight_core::sync::led_mapper::EdgeLayout;
 use quiklight_core::sync::screen_capturer::{CaptureError, ScreenCapturer};
@@ -230,7 +229,7 @@ fn run(cmd_rx: Receiver<Command>, events_tx: Sender<WorkerEvent>) {
     // Выход: гасим подсветку, если так настроено.
     if state.settings.turn_off_on_exit {
         if let Some(device) = state.device.as_mut() {
-            let _ = turn_off_all(device);
+            let _ = device.turn_off_all();
         }
     }
     // Сообщаем UI, что поток завершился (UI ждёт это перед выходом).
@@ -341,20 +340,9 @@ fn apply_static(state: &mut State, events_tx: &Sender<WorkerEvent>) {
     }
 }
 
-/// Выключить подсветку: 0x97 ×4 + чёрный (см. PROTOCOL.md, подводные камни).
-fn turn_off_all(device: &mut Device) -> Result<(), DeviceError> {
-    for _ in 0..4 {
-        let id = device.next_session_id();
-        device.write_frame(&turn_off(id))?;
-        std::thread::sleep(Duration::from_millis(20));
-    }
-    let id = device.next_session_id();
-    device.write_frame(&set_section_led(id, &[(1, 0, 0, 0, LED_END)]))
-}
-
 fn turn_off_and_report(state: &mut State, events_tx: &Sender<WorkerEvent>) {
     if let Some(device) = state.device.as_mut() {
-        if let Err(e) = turn_off_all(device) {
+        if let Err(e) = device.turn_off_all() {
             state.device = None;
             let _ = events_tx.send(WorkerEvent::DeviceChanged {
                 connected: false,
@@ -487,24 +475,19 @@ fn sync_step(state: &mut State, events_tx: &Sender<WorkerEvent>) {
     state.sync_error_reported = false;
 
     let layout = state.settings.layout_effective(state.device_led);
-    let colors = state.extractor.extract(
-        &frame.data,
-        frame.pitch as u32,
-        frame.width,
-        frame.height,
-        &layout,
-    );
+    let colors =
+        state
+            .extractor
+            .extract(&frame.data, frame.pitch, frame.width, frame.height, &layout);
 
-    // SC-кадр: action 0x80, payload — цвета RGB подряд.
+    // SC-кадр: action 128, payload — цвета RGB подряд.
     let mut payload = Vec::with_capacity(colors.len() * 3);
     for (r, g, b) in colors {
         payload.extend_from_slice(&[r, g, b]);
     }
 
     if let Some(device) = device_or_reconnect(state, events_tx) {
-        let id = device.next_session_id();
-        let sc = sc_frame(id, 0x80, &payload).with_checksum();
-        if let Err(e) = device.write_frame(&sc) {
+        if let Err(e) = device.send_screen_sync(&payload) {
             device_lost(state, events_tx, &e);
         }
     }
@@ -534,9 +517,7 @@ fn fireplace_step(state: &mut State, events_tx: &Sender<WorkerEvent>) {
     }
 
     if let Some(device) = device_or_reconnect(state, events_tx) {
-        let id = device.next_session_id();
-        let sc = sc_frame(id, 0x80, &payload).with_checksum();
-        if let Err(e) = device.write_frame(&sc) {
+        if let Err(e) = device.send_screen_sync(&payload) {
             device_lost(state, events_tx, &e);
         }
     }
@@ -660,8 +641,10 @@ mod tests {
 
     #[test]
     fn led_count_manual_wins() {
-        let mut s = Settings::default();
-        s.led_count = 100;
+        let s = Settings {
+            led_count: 100,
+            ..Settings::default()
+        };
         assert_eq!(s.led_count_effective(Some(51)), 100);
     }
 
@@ -676,20 +659,24 @@ mod tests {
 
     #[test]
     fn layout_manual_wins() {
-        let mut s = Settings::default();
-        s.layout = EdgeLayout {
-            left: 5,
-            top: 10,
-            right: 5,
-            bottom: 0,
+        let s = Settings {
+            layout: EdgeLayout {
+                left: 5,
+                top: 10,
+                right: 5,
+                bottom: 0,
+            },
+            ..Settings::default()
         };
         assert_eq!(s.layout_effective(Some(51)).total(), 20);
     }
 
     #[test]
     fn frame_interval_clamped() {
-        let mut s = Settings::default();
-        s.fps = 30;
+        let mut s = Settings {
+            fps: 30,
+            ..Settings::default()
+        };
         assert_eq!(s.frame_interval_ms(), 33);
         s.fps = 60;
         assert_eq!(s.frame_interval_ms(), 16);

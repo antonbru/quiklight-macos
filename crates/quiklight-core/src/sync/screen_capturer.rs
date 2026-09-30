@@ -28,7 +28,7 @@ pub struct CapturedFrame {
     pub width: u32,
     pub height: u32,
     /// Число байт на строку (может быть больше `width * 4` — выравнивание).
-    pub pitch: usize,
+    pub pitch: u32,
     /// Пиксели BGRA, длина `pitch * height`.
     pub data: Vec<u8>,
 }
@@ -221,7 +221,7 @@ unsafe fn cgimage_to_frame(
     Ok(CapturedFrame {
         width: w as u32,
         height: h as u32,
-        pitch: bytes_per_row,
+        pitch: bytes_per_row as u32,
         data: buf,
     })
 }

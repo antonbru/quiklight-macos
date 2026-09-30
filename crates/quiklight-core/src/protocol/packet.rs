@@ -45,25 +45,7 @@ impl Frame {
 /// assert_eq!(frame, vec![0x52, 0x42, 0x07, 0x02, 0x87, 0x32, 0x56]);
 /// ```
 pub fn rb_frame(id: u8, action: u8, payload: &[u8]) -> Frame {
-    // Полный размер: 'R'(1) + 'B'(1) + size(1) + id(1) + action(1) + payload + checksum(1)
-    let size = 6 + payload.len();
-    assert!(
-        size <= 255,
-        "RB-кадр не может превышать 255 байт (size — 1 байт)"
-    );
-    let mut bytes = Vec::with_capacity(size);
-    bytes.push(marker::RB[0]);
-    bytes.push(marker::RB[1]);
-    bytes.push(size as u8);
-    bytes.push(id);
-    bytes.push(action);
-    bytes.extend_from_slice(payload);
-    let checksum_pos = bytes.len();
-    bytes.push(0); // сюда запишется checksum
-    Frame {
-        bytes,
-        checksum_pos,
-    }
+    build_frame(marker::RB, SizeField::OneByte, id, action, payload)
 }
 
 /// Построить SC-кадр (без checksum). Используется для передачи цветов экрана
@@ -71,18 +53,48 @@ pub fn rb_frame(id: u8, action: u8, payload: &[u8]) -> Frame {
 ///
 /// Кадр может быть больше 255 байт — это нормально для SC (цвета 63+ LED).
 pub fn sc_frame(id: u8, action: u8, payload: &[u8]) -> Frame {
-    let size = 6 + payload.len(); // 'S' 'C' + size(2) + id + action + payload + checksum
-    assert!(size <= u16::MAX as usize, "SC-кадр слишком большой");
+    build_frame(marker::SC, SizeField::TwoBytesBe, id, action, payload)
+}
+
+/// Разрядность поля размера кадра: RB — 1 байт, SC — 2 байта big-endian.
+#[derive(Debug, Clone, Copy)]
+enum SizeField {
+    OneByte,
+    TwoBytesBe,
+}
+
+/// Общий билдер кадра: маркер + размер + id + action + payload + заглушка checksum.
+///
+/// Полный размер = маркер(2) + размер(1|2) + id(1) + action(1) + payload + checksum(1).
+fn build_frame(
+    marker: [u8; 2],
+    size_field: SizeField,
+    id: u8,
+    action: u8,
+    payload: &[u8],
+) -> Frame {
+    let size = 6 + payload.len();
     let mut bytes = Vec::with_capacity(size);
-    bytes.push(marker::SC[0]);
-    bytes.push(marker::SC[1]);
-    bytes.push((size >> 8) as u8);
-    bytes.push((size & 0xFF) as u8);
+    bytes.extend_from_slice(&marker);
+    match size_field {
+        SizeField::OneByte => {
+            assert!(
+                size <= u8::MAX as usize,
+                "RB-кадр не может превышать 255 байт (size — 1 байт)"
+            );
+            bytes.push(size as u8);
+        }
+        SizeField::TwoBytesBe => {
+            assert!(size <= u16::MAX as usize, "SC-кадр слишком большой");
+            bytes.push((size >> 8) as u8);
+            bytes.push((size & 0xFF) as u8);
+        }
+    }
     bytes.push(id);
     bytes.push(action);
     bytes.extend_from_slice(payload);
     let checksum_pos = bytes.len();
-    bytes.push(0);
+    bytes.push(0); // сюда запишется checksum
     Frame {
         bytes,
         checksum_pos,
@@ -117,10 +129,11 @@ pub fn verify_checksum(frame: &[u8]) -> bool {
     if frame.len() < 3 {
         return false;
     }
+    let checksum = frame[frame.len() - 1];
     let sum: u8 = frame[..frame.len() - 1]
         .iter()
         .fold(0u8, |acc, &b| acc.wrapping_add(b));
-    sum == *frame.last().unwrap()
+    sum == checksum
 }
 
 #[cfg(test)]

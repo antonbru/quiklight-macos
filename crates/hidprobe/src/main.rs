@@ -14,8 +14,7 @@ use hidapi::HidApi;
 use quiklight_core::hid::device::{Device, DeviceError};
 use quiklight_core::hid::device_info::parse_device_info;
 use quiklight_core::protocol::actions::{
-    read_device_info, set_brightness, set_dynamic_speed, set_led_effect, set_section_led, turn_off,
-    LED_END,
+    read_device_info, set_brightness, set_dynamic_speed, set_led_effect, set_section_led, LED_END,
 };
 
 /// Коды выхода для CLI.
@@ -23,6 +22,53 @@ mod exit {
     pub const OK: i32 = 0;
     pub const USAGE: i32 = 2;
     pub const DEVICE: i32 = 3;
+}
+
+/// Ошибка CLI: неверные аргументы или сбой устройства.
+#[derive(Debug)]
+enum CliError {
+    /// Неверные аргументы — код выхода 2.
+    Usage(String),
+    /// Ошибка работы с устройством — код выхода 3.
+    Device(DeviceError),
+}
+
+impl From<DeviceError> for CliError {
+    fn from(e: DeviceError) -> Self {
+        CliError::Device(e)
+    }
+}
+
+impl std::fmt::Display for CliError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CliError::Usage(m) => write!(f, "{m}"),
+            CliError::Device(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl CliError {
+    /// Код выхода процесса для этой ошибки.
+    fn exit_code(&self) -> i32 {
+        match self {
+            CliError::Usage(_) => exit::USAGE,
+            CliError::Device(_) => exit::DEVICE,
+        }
+    }
+}
+
+/// Разобрать один числовой аргумент 0..=100 (для brightness/speed).
+fn parse_percent(args: &[String], name: &str) -> Result<u8, CliError> {
+    let Some(v) = args.first().and_then(|s| s.parse::<u8>().ok()) else {
+        return Err(CliError::Usage(format!("{name} — нужно число 0-100")));
+    };
+    if v > 100 {
+        return Err(CliError::Usage(format!(
+            "{name} должен быть 0-100, получено {v}"
+        )));
+    }
+    Ok(v)
 }
 
 fn main() {
@@ -66,7 +112,7 @@ fn run(args: &[String]) -> i32 {
         Ok(()) => exit::OK,
         Err(e) => {
             eprintln!("hidprobe: {e}");
-            exit::DEVICE
+            e.exit_code()
         }
     }
 }
@@ -91,7 +137,7 @@ fn open_device(api: &HidApi) -> Result<Device, DeviceError> {
     Device::open_first(api)
 }
 
-fn cmd_info(api: &HidApi) -> Result<(), DeviceError> {
+fn cmd_info(api: &HidApi) -> Result<(), CliError> {
     let mut dev = open_device(api)?;
     let id = dev.next_session_id();
     let frame = read_device_info(id);
@@ -137,10 +183,11 @@ fn parse_rgb(args: &[String]) -> Option<(u8, u8, u8)> {
     Some((r, g, b))
 }
 
-fn cmd_color(api: &HidApi, args: &[String]) -> Result<(), DeviceError> {
+fn cmd_color(api: &HidApi, args: &[String]) -> Result<(), CliError> {
     let Some((r, g, b)) = parse_rgb(args) else {
-        eprintln!("hidprobe: color — нужно три числа 0-255: color <R> <G> <B>");
-        return Err(DeviceError::EmptyFrame);
+        return Err(CliError::Usage(
+            "color — нужно три числа 0-255: color <R> <G> <B>".into(),
+        ));
     };
     let mut dev = open_device(api)?;
     let id = dev.next_session_id();
@@ -150,15 +197,8 @@ fn cmd_color(api: &HidApi, args: &[String]) -> Result<(), DeviceError> {
     Ok(())
 }
 
-fn cmd_brightness(api: &HidApi, args: &[String]) -> Result<(), DeviceError> {
-    let Some(val) = args.first().and_then(|s| s.parse::<u8>().ok()) else {
-        eprintln!("hidprobe: brightness — нужно число 0-100");
-        return Err(DeviceError::EmptyFrame);
-    };
-    if val > 100 {
-        eprintln!("hidprobe: яркость должна быть 0-100, получено {val}");
-        return Err(DeviceError::EmptyFrame);
-    }
+fn cmd_brightness(api: &HidApi, args: &[String]) -> Result<(), CliError> {
+    let val = parse_percent(args, "brightness")?;
     let mut dev = open_device(api)?;
     let id = dev.next_session_id();
     let frame = set_brightness(id, val);
@@ -167,40 +207,33 @@ fn cmd_brightness(api: &HidApi, args: &[String]) -> Result<(), DeviceError> {
     Ok(())
 }
 
-fn cmd_off(api: &HidApi) -> Result<(), DeviceError> {
+fn cmd_off(api: &HidApi) -> Result<(), CliError> {
     let mut dev = open_device(api)?;
-    // Официальное приложение повторяет выключение 4 раза с интервалом 20 мс
-    // (PROTOCOL.md, подводный камень №3).
-    for _ in 0..4 {
-        let id = dev.next_session_id();
-        let frame = turn_off(id);
-        dev.write_frame(&frame)?;
-        std::thread::sleep(std::time::Duration::from_millis(20));
-    }
-    // Совместимость со старыми прошивками: гасим рисованием чёрного.
-    let id = dev.next_session_id();
-    let frame = set_section_led(id, &[(1, 0, 0, 0, LED_END)]);
-    dev.write_frame(&frame)?;
+    // 0x97 ×4 + чёрный — общий сценарий из ядра (PROTOCOL.md, п. 2–3).
+    dev.turn_off_all()?;
     println!("Подсветка выключена (0x97 ×4 + чёрный).");
     Ok(())
 }
 
-fn cmd_effect(api: &HidApi, args: &[String]) -> Result<(), DeviceError> {
+fn cmd_effect(api: &HidApi, args: &[String]) -> Result<(), CliError> {
     let (tipo, idx) = match args {
         [t, i] => (t.parse::<u8>().ok(), i.parse::<u8>().ok()),
         _ => (None, None),
     };
     let Some((tipo, idx)) = tipo.zip(idx) else {
-        eprintln!("hidprobe: effect — нужно `effect <tipo> <idx>`, tipo 2|3, idx 0-6");
-        return Err(DeviceError::EmptyFrame);
+        return Err(CliError::Usage(
+            "effect — нужно `effect <tipo> <idx>`, tipo 2|3, idx 0-6".into(),
+        ));
     };
     if tipo != 2 && tipo != 3 {
-        eprintln!("hidprobe: tipo должен быть 2 (динамика) или 3 (звук), получено {tipo}");
-        return Err(DeviceError::EmptyFrame);
+        return Err(CliError::Usage(format!(
+            "tipo должен быть 2 (динамика) или 3 (звук), получено {tipo}"
+        )));
     }
     if idx > 6 {
-        eprintln!("hidprobe: индекс эффекта 0-6, получено {idx}");
-        return Err(DeviceError::EmptyFrame);
+        return Err(CliError::Usage(format!(
+            "индекс эффекта 0-6, получено {idx}"
+        )));
     }
     let mut dev = open_device(api)?;
     let id = dev.next_session_id();
@@ -210,15 +243,8 @@ fn cmd_effect(api: &HidApi, args: &[String]) -> Result<(), DeviceError> {
     Ok(())
 }
 
-fn cmd_speed(api: &HidApi, args: &[String]) -> Result<(), DeviceError> {
-    let Some(val) = args.first().and_then(|s| s.parse::<u8>().ok()) else {
-        eprintln!("hidprobe: speed — нужно число 0-100");
-        return Err(DeviceError::EmptyFrame);
-    };
-    if val > 100 {
-        eprintln!("hidprobe: скорость 0-100, получено {val}");
-        return Err(DeviceError::EmptyFrame);
-    }
+fn cmd_speed(api: &HidApi, args: &[String]) -> Result<(), CliError> {
+    let val = parse_percent(args, "speed")?;
     let mut dev = open_device(api)?;
     let id = dev.next_session_id();
     // set_dynamic_speed уже инвертирует: пользовательская скорость → устройству.
