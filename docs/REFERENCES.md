@@ -4,6 +4,9 @@
 
 > Правило отбора: проекты малозвёздные (ниша узкая), но живы и свежие — не archived, есть коммиты в 2026. Для протокольной документации важна независимая верификация, а не популярность.
 
+> **Статус документа:** снимок на 2026-09, ссылки и активность репозиториев
+> повторно не проверялись. Источник истины по протоколу — `docs/PROTOCOL.md`.
+
 ## 1. SyncRGB / OpenSyncLight — главный референс (Windows, Rust)
 
 - **SyncRGB**: https://github.com/Tonic-Jin/SyncRGB — 3⭐, MIT, Rust, обновляется (последний push авг 2026), не archived
@@ -45,7 +48,7 @@
 
 ## Итоговая стратегия
 
-Пишем свой код на **Rust** для macOS (см. CLINE.md): AppKit через `objc2` для GUI, ScreenCaptureKit через `objc2-screen-capture-kit`, HID через `hidapi`. Так как SyncRGB — уже Rust, перенос почти 1-в-1:
+Пишем свой код на **Rust** для macOS (обоснование — `docs/DECISIONS.md`, ADR-001): AppKit через `objc2` для GUI, ScreenCaptureKit через `objc2-screen-capture-kit`, HID через `hidapi`. Так как SyncRGB — уже Rust, перенос почти 1-в-1:
 - протокол — по `docs/PROTOCOL.md` (сверять с `protocol.rs` из SyncRGB);
 - цветообработка — по `extractor.rs` из SyncRGB (переносится напрямую);
 - поведение команд/тайминги — по README SyncRGB и PROTOCOL.md quicklight-linux.

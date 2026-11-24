@@ -1,7 +1,7 @@
 //! hidprobe — CLI-утилита для проверки LED-панели QuikLight (фаза 0).
 //!
 //! Команды:
-//! - `hidprobe info`            — readDeviceInfo (MAC, число LED, прошивка)
+//! - `hidprobe info`            — readDeviceInfo (device_id/UUID, число LED, прошивка)
 //! - `hidprobe color R G B`     — вся лента одним цветом (0-255)
 //! - `hidprobe brightness N`    — яркость 0-100
 //! - `hidprobe off`             — выключить (0x97 + чёрный цвет, повтор 4×)
@@ -122,7 +122,7 @@ fn print_usage() {
         r#"Проверка панели QuikLight (0x1A86:0xFE07)
 
 Использование:
-  hidprobe info                  — информация об устройстве (MAC, LED, прошивка)
+  hidprobe info                  — информация об устройстве (device_id/UUID, LED, прошивка)
   hidprobe color <R> <G> <B>     — вся лента одним цветом (0-255)
   hidprobe brightness <0-100>    — яркость
   hidprobe off                   — выключить подсветку

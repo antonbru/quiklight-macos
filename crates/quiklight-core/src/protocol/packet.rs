@@ -170,8 +170,8 @@ mod tests {
 
     #[test]
     fn rb_frame_read_info() {
-        // Пустой payload → size = 6. В PROTOCOL.md ошибочно указан 0x05;
-        // формула size = полный размер кадра даёт 0x06 (см. предупреждение в доке).
+        // Пустой payload → size = 6: формула size = полный размер кадра.
+        // Эталон совпадает с docs/PROTOCOL.md, раздел «Эталонные hex-пакеты».
         let frame = rb_frame(2, 0x82, &[]).with_checksum();
         assert_eq!(frame, vec![0x52, 0x42, 0x06, 0x02, 0x82, 0x1E]);
         assert!(verify_checksum(&frame));

@@ -150,7 +150,7 @@ mod tests {
     #[test]
     fn read_info() {
         // Пустой payload → size = 6 (формула из PROTOCOL.md: полный размер кадра).
-        // В PROTOCOL.md ошибочно указан 0x05 — см. предупреждение в доке.
+        // Эталон совпадает с docs/PROTOCOL.md.
         assert_eq!(
             read_device_info(2),
             vec![0x52, 0x42, 0x06, 0x02, 0x82, 0x1E]

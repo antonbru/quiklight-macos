@@ -1,7 +1,8 @@
 # ARCHITECTURE.md — карта модулей QuikLight
 
 > Краткая карта проекта: кто за что отвечает и как ходят данные.
-> Протокол устройства — в `docs/PROTOCOL.md`, стек и правила работы — в `.clinerules/CLINE.md`.
+> Протокол устройства — в `docs/PROTOCOL.md`, команды и правила работы — в
+> `AGENTS.md`, история решений — в `docs/DECISIONS.md`.
 
 ## Крейты
 
@@ -18,11 +19,14 @@
 | `color.rs` | `Rgb = (u8,u8,u8)` и HSV→RGB (общие утилиты) |
 | `protocol/packet.rs` | `Frame`: RB (1-байт size) и SC (2-байт BE size), checksum, чанкинг в 64-байтные HID-отчёты |
 | `protocol/actions.rs` | Коды действий + типизированные команды (brightness, effect, section, turn_off, set_all_black) |
-| `hid/device.rs` | `Device`: поиск `1a86:fe07`, interface 0, `write_frame`, `write_with_response`, `turn_off_all` (0x97×4 + чёрный), `send_screen_sync` |
-| `hid/device_info.rs` | `parse_device_info`: смещения полей ответа `readDeviceInfo` |
-| `sync/screen_capturer.rs` | `ScreenCapturer`: `SCScreenshotManager` → `CapturedFrame` (BGRA + pitch) |
+| `hid/device.rs` | `Device`: поиск `1a86:fe07`, interface 0, `write_frame`, `write_with_response`, `turn_off_all` (0x97×4 + чёрный), `send_screen_sync`. Запись сериализуется через `&mut self` — отдельной очереди как объекта нет |
+| `hid/device_info.rs` | `DeviceInfo` + `parse_device_info`: смещения полей ответа `readDeviceInfo`; `DEFAULT_LED_COUNT = 63` — фолбэк, если панель ещё не ответила |
+| `sync/screen_capturer.rs` | `ScreenCapturer`: `SCScreenshotManager` → `CapturedFrame` (BGRA + pitch). Захват синхронный (локальный канал + `RcBlock`) и блокирует engine-поток до готовности кадра |
 | `sync/color_extractor.rs` | кадр → сетка → края → постобработка (гамма/насыщенность/light compression/сглаживание) |
 | `sync/led_mapper.rs` | края экрана → LED в порядке проводов; `EdgeLayout::default_for` |
+
+`mod.rs` в каждом модуле только реэкспортирует подмодули
+(`color`, `protocol`, `hid`, `sync`, `effects`).
 
 Инварианты ядра:
 
@@ -69,7 +73,12 @@
 - Один фоновый поток на всё устройство: UI никогда не блокируется на HID.
 - Screen sync: интервал 16–50 мс (20–60 fps из настроек); захват ограничен
   480 px по большой стороне — для ambilight этого достаточно.
-- «Камин» рисуется программно ~30 fps и отправляется теми же SC-кадрами (action 128).
+- «Камин» рисуется программно с фиксированным интервалом 33 мс (~30 fps);
+  настройка fps влияет только на screen sync. Кадры уходят теми же SC-кадрами
+  (action 128).
+- `readDeviceInfo` запрашивается один раз при старте. Если панель подключили
+  позже, число LED не перечитывается — авто-раскладка остаётся на
+  `DEFAULT_LED_COUNT = 63`.
 
 ## Как расширять
 
@@ -84,5 +93,6 @@
 
 Юнит-тесты inline (`#[cfg(test)] mod tests`) рядом с кодом: протокол (`packet`,
 `actions`), парсер `device_info`, маппинг LED, постобработка цвета, настройки,
-математика «Камина» и HSV. Железо не требуется — `cargo test --workspace`.
+математика «Камина» и HSV. Железо не требуется: `cargo test --workspace`;
+один модуль — `cargo test -p quiklight-core packet::`.
 

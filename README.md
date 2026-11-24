@@ -16,7 +16,7 @@
 - **screen sync** — ambilight: цвета краёв экрана → LED в реальном времени
   (ScreenCaptureKit, macOS 14+, 20–60 fps, гамма/насыщенность/сглаживание);
 - настройки: число LED, раскладка по краям, fps, гамма, насыщенность,
-  световое сжатие, «выключать LED при выходе»;
+  сглаживание, световое сжатие, «выключать LED при выходе»;
 - автопереподключение: при отключении/подключении панели приложение
   продолжает работать.
 
@@ -60,7 +60,8 @@ open target/release/QuikLight.app
      - **Screen sync** — цвет по краям экрана;
      - **Эффекты** → Динамика и Звук (встроенные) + **Камин** (свой эффект);
    - **Яркость** — слайдер прямо в меню;
-   - **Настройки…** — LED, раскладка, fps, гамма, насыщенность;
+   - **Настройки…** — LED, раскладка, fps, гамма, насыщенность, сглаживание,
+     световое сжатие;
    - **Выйти** — погасит подсветку, если включена опция.
 
 Для **Screen sync** нужно разрешение «Запись экрана»: Системные настройки →
@@ -99,11 +100,13 @@ open target/release/QuikLight.app
 ## CLI-проверка железа (hidprobe)
 
 ```bash
-cargo run -p hidprobe -- info          # MAC/LED/прошивка (readDeviceInfo)
+cargo run -p hidprobe -- info          # UUID/device_id, число LED, прошивка
 cargo run -p hidprobe -- color 255 0 0 # вся лента красным
 cargo run -p hidprobe -- brightness 50
 cargo run -p hidprobe -- off
 cargo run -p hidprobe -- effect 2 0    # динамический эффект 0
+cargo run -p hidprobe -- speed 30      # скорость эффектов (инвертируется)
+cargo run -p hidprobe -- help          # справка по командам
 ```
 
 ## Проверка SC-каналов (screen sync) на железе
@@ -122,34 +125,48 @@ cargo run -p quiklight-core --example sync_probe
 cargo fmt --all                         # форматирование
 cargo clippy --workspace --all-targets  # линтер (должен быть чист)
 cargo test --workspace                  # юнит-тесты
+cargo test -p quiklight-core packet::   # один модуль (фильтр по имени)
 ```
 
-Юнит-тесты протокола (checksum, чанкинг, эталонные hex-пакеты, парсер
+Юнит-тесты лежат inline (`#[cfg(test)] mod tests`) рядом с кодом и не требуют
+железа: протокол (checksum, чанкинг, эталонные hex-пакеты, парсер
 `readDeviceInfo` — включая реальный ответ панели), screen sync (маппинг
-краёв, постобработка) и эффекта «Камин» не требуют железа — их можно
-запускать без подключённой панели.
+краёв, постобработка) и эффект «Камин» можно проверять без подключённой панели.
 
 ## Структура
 
 ```
 crates/
 ├── quiklight-core/   # протокол RB/SC, HID-транспорт, захват экрана, цвет
-│   └── examples/sync_probe.rs   # диагностика SC-каналов на железе
 ├── quiklight-app/    # menu bar приложение (AppKit через objc2)
-│   └── src/{main,app,menu,settings_window,ui,settings,engine}.rs + effects/fireplace.rs
 └── hidprobe/         # CLI-проверка железа (фаза 0)
-assets/icons/         # AppIcon-1024.png (мастер) + template-наборы меню-бара + preview-appicon.png
-scripts/build_app.sh  # сборка .app-бандла (+ подпись: ad-hoc или сертификатом)
-docs/                 # PROTOCOL.md, REFERENCES.md, ARCHITECTURE.md, ICON_TZ.md
+assets/icons/         # иконки приложения и menu bar
+scripts/build_app.sh  # сборка .app-бандла (+ подпись)
+docs/                 # документация проекта
 ```
+
+Подробная карта модулей, поток данных UI ↔ engine и точки расширения —
+в [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## Документация
+
+| Документ | Содержание |
+|---|---|
+| [`docs/PROTOCOL.md`](docs/PROTOCOL.md) | Протокол устройства: кадры, action-коды, hex-векторы, подводные камни |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Крейты, модули, потоки, как расширять |
+| [`docs/DECISIONS.md`](docs/DECISIONS.md) | Журнал архитектурных решений и открытые вопросы |
+| [`docs/REFERENCES.md`](docs/REFERENCES.md) | Внешние open-source реализации |
+| [`AGENTS.md`](AGENTS.md) | Команды и инварианты для AI-агентов |
+| [`docs/ICON_TZ.md`](docs/ICON_TZ.md) | ТЗ на иконки (архив, выполнено) |
 
 ## Ограничения
 
 - **Screen sync требует macOS 14+** (используется `SCScreenshotManager`);
   статичные режимы и эффекты работают на macOS 13+.
 - BLE/донгл-вариант панели не поддерживается (другой протокол).
-- **Настройки и выбранный режим не сохраняются** между запусками — живут
-  в памяти процесса и сбрасываются при выходе (персистентность в планах).
+- **Настройки и выбранный режим не сохраняются** между запусками: файла настроек
+  нет, `Settings` (`Copy`) живёт в памяти процесса и сбрасывается при выходе
+  (персистентность в планах, см. `docs/DECISIONS.md`).
 - Автозапуск при входе в систему пока не реализован.
 - При одновременной работе с официальным SyncLight возможны конфликты записи
   в HID — закрывайте SyncLight.
