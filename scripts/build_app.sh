@@ -115,7 +115,7 @@ sed -i '' "s/__QUIKLIGHT_VERSION__/$VERSION/g" "$APP/Contents/Info.plist"
 
 if [ "$SKIP_SIGN" = "0" ]; then
     if [ -n "$IDENTITY" ]; then
-        echo "▶ Подпись сертификатом «$IDENTITY»..."
+        echo "▶ Подпись сертификатом «${IDENTITY}»..."
         codesign --force --deep --sign "$IDENTITY" "$APP"
     else
         echo "▶ Ad-hoc подпись (-s -)..."

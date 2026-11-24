@@ -68,7 +68,7 @@ if ! gh auth status >/dev/null 2>&1; then
     exit 1
 fi
 if ! security find-identity -p codesigning 2>/dev/null | grep -qF "\"$IDENTITY\""; then
-    echo "В связке ключей нет сертификата «$IDENTITY»." >&2
+    echo "В связке ключей нет сертификата «${IDENTITY}»." >&2
     echo "Создайте его: ./scripts/create_dev_cert.sh \"$IDENTITY\"" >&2
     echo "или передайте существующий: --sign \"ИМЯ\"" >&2
     exit 1
