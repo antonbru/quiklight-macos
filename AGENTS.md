@@ -22,6 +22,7 @@
 ```bash
 ./scripts/build_app.sh --release [--sign "Имя"]   # → target/release/QuikLight.app
 open target/release/QuikLight.app                 # запускать бандл, не сырой бинарник
+./scripts/release.sh --sign "QuikLight Dev"       # zip + latest.json + GitHub Release
 cargo fmt --all
 cargo clippy --workspace --all-targets            # должен быть чист
 cargo test --workspace                            # юнит-тесты, железо не требуется
@@ -46,6 +47,10 @@ cargo run -p quiklight-core --example sync_probe   # проверка SC-кан�
 - Скорость эффектов инвертируется: на устройство уходит `100 - slider`.
 - Число LED берётся из `readDeviceInfo`; `DEFAULT_LED_COUNT = 63` — фолбэк, у панели
   владельца 51 LED (раскладка 17/29/17).
+- Версия — одна на всё: `[workspace.package]` в `Cargo.toml`; `build_app.sh`
+  вписывает её в Info.plist, `release.sh` — в `latest.json`.
+- Обновление ставится только из `.app`: до подмены проверяются sha256 из
+  манифеста, `codesign`, `CFBundleIdentifier` и версия; устройство не трогается.
 - Правка протокола = правка `docs/PROTOCOL.md` + hex-векторов в тестах.
 
 ## Куда добавлять код
@@ -55,6 +60,8 @@ cargo run -p quiklight-core --example sync_probe   # проверка SC-кан�
   пункт меню в `menu.rs`.
 - **Настройка** → поле в `settings.rs` + контрол в `settings_window.rs` +
   проброс через `Command::SetSettings`.
+- **Поле манифеста обновления** → `updater.rs` (разбор и валидация) +
+  `scripts/release.sh` (запись в `latest.json`) + таблица в `docs/ARCHITECTURE.md`.
 - Подробности — в `docs/ARCHITECTURE.md`, раздел «Как расширять».
 
 ## Правила

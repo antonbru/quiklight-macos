@@ -8,8 +8,8 @@ use objc2::{sel, MainThreadMarker};
 
 use block2::RcBlock;
 use objc2_app_kit::{
-    NSAlert, NSBezierPath, NSButton, NSColor, NSControl, NSControlStateValueOn, NSImage, NSSlider,
-    NSStepper, NSTextField, NSView,
+    NSAlert, NSAlertFirstButtonReturn, NSBezierPath, NSButton, NSColor, NSControl,
+    NSControlStateValueOn, NSImage, NSSlider, NSStepper, NSTextField, NSView,
 };
 use objc2_core_foundation::CGFloat;
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
@@ -207,4 +207,15 @@ pub(crate) fn show_alert(title: &str, message: &str) {
     alert.setInformativeText(&NSString::from_str(message));
     alert.addButtonWithTitle(&NSString::from_str("OK"));
     alert.runModal();
+}
+
+/// Алерт с двумя кнопками: `true` — нажата первая (действие), `false` — вторая.
+pub(crate) fn confirm_alert(title: &str, message: &str, accept: &str, cancel: &str) -> bool {
+    let mtm = MainThreadMarker::new().unwrap();
+    let alert = NSAlert::new(mtm);
+    alert.setMessageText(&NSString::from_str(title));
+    alert.setInformativeText(&NSString::from_str(message));
+    alert.addButtonWithTitle(&NSString::from_str(accept));
+    alert.addButtonWithTitle(&NSString::from_str(cancel));
+    alert.runModal() == NSAlertFirstButtonReturn
 }

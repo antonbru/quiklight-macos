@@ -17,6 +17,7 @@ use quiklight_core::sync::color_extractor::ColorExtractor;
 use quiklight_core::sync::screen_capturer::{CaptureError, ScreenCapturer};
 
 use crate::settings::Settings;
+use crate::updater::UpdateEvent;
 
 /// Режим работы подсветки.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,6 +63,8 @@ pub enum WorkerEvent {
     ModeChanged(Mode),
     /// Ошибка (например, нет разрешения «Запись экрана»).
     Error(String),
+    /// Событие проверки/установки обновления (см. `updater`).
+    Update(UpdateEvent),
     /// Поток завершился (после погашения LED при выходе).
     Exited,
 }

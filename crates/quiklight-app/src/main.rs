@@ -15,6 +15,7 @@ mod menu;
 mod settings;
 mod settings_window;
 mod ui;
+mod updater;
 
 use std::cell::{Cell, RefCell};
 use std::sync::mpsc::{self, Sender};
@@ -37,6 +38,9 @@ fn main() {
     // Каналы UI ↔ фоновый поток.
     let (cmd_tx, cmd_rx): (Sender<Command>, _) = mpsc::channel();
     let (evt_tx, evt_rx): (Sender<WorkerEvent>, _) = mpsc::channel();
+    // Клон для потока обновлений: события идут в тот же канал, который
+    // опрашивает таймер UI.
+    let evt_tx_updater = evt_tx.clone();
     let _worker = engine::spawn(cmd_rx, evt_tx);
 
     let delegate = AppDelegate::new(
@@ -61,6 +65,9 @@ fn main() {
             preset_items: RefCell::new(Vec::new()),
             brightness_slider: RefCell::new(None),
             settings_panel: RefCell::new(None),
+            updater_events: RefCell::new(evt_tx_updater),
+            check_update_item: RefCell::new(None),
+            staged_update: RefCell::new(None),
         },
     );
 

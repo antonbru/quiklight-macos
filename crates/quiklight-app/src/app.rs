@@ -1,6 +1,7 @@
 //! Делегат приложения: состояние UI, действия меню, применение событий потока.
 
 use std::cell::{Cell, RefCell};
+use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
 
 use objc2::rc::Retained;
@@ -17,7 +18,8 @@ use crate::engine::{Command, Mode, WorkerEvent};
 use crate::menu::{PRESET_COLORS, TAG_EFFECT_FIREPLACE, TAG_MODE_STATIC, TAG_MODE_SYNC};
 use crate::settings::Settings;
 use crate::settings_window::SettingsPanel;
-use crate::ui::{color_circle_image, show_alert, status_icon, status_line};
+use crate::ui::{color_circle_image, confirm_alert, show_alert, status_icon, status_line};
+use crate::updater::{self, UpdateEvent};
 /// Кнопка-кружок пресета палитры: цвет (R, G, B) + кнопка.
 pub(crate) type PresetButton = (u8, u8, u8, Retained<NSButton>);
 
@@ -48,6 +50,14 @@ pub(crate) struct AppIvars {
     pub(crate) preset_items: RefCell<Vec<PresetButton>>,
     pub(crate) brightness_slider: RefCell<Option<Retained<NSSlider>>>,
     pub(crate) settings_panel: RefCell<Option<SettingsPanel>>,
+
+    // Обновление приложения.
+    /// Клон канала событий для потоков проверки/загрузки обновления.
+    pub(crate) updater_events: RefCell<Sender<WorkerEvent>>,
+    /// Пункт меню «Проверить обновление…».
+    pub(crate) check_update_item: RefCell<Option<Retained<NSMenuItem>>>,
+    /// Скачанный и проверенный бандл, готовый к подмене.
+    pub(crate) staged_update: RefCell<Option<PathBuf>>,
 }
 
 define_class!(
@@ -230,24 +240,26 @@ define_class!(
             field.setStringValue(&NSString::from_str(&text));
         }
 
+        // ── обновление приложения ──
+        #[unsafe(method(checkForUpdates:))]
+        fn check_for_updates(&self, _sender: &AnyObject) {
+            if self.update_busy() {
+                return;
+            }
+            // Обновляемся только из бандла: подменять запущенный бинарник
+            // из target/ бессмысленно, а helper-скрипт ждёт именно .app.
+            if let Err(message) = updater::current_app() {
+                show_alert("QuikLight", &message);
+                return;
+            }
+            self.set_update_item("Проверка обновлений…", false);
+            updater::spawn_check(self.ivars().updater_events.borrow().clone());
+        }
+
         // ── выход ──
         #[unsafe(method(quit:))]
         fn quit(&self, _sender: &AnyObject) {
-            self.send(Command::Quit);
-            // Ждём ack «поток завершился»: он гасит LED (если включена опция).
-            // Ограничено 2 секундами, чтобы не зависнуть при сбое захвата экрана.
-            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-            while std::time::Instant::now() < deadline {
-                {
-                    let events = self.ivars().events.borrow_mut();
-                    if events.try_iter().any(|e| matches!(e, WorkerEvent::Exited)) {
-                        break;
-                    }
-                }
-                std::thread::sleep(std::time::Duration::from_millis(50));
-            }
-            let mtm = MainThreadMarker::new().unwrap();
-            NSApplication::sharedApplication(mtm).terminate(Some(self));
+            self.shutdown_and_terminate();
         }
     }
 );
@@ -264,6 +276,121 @@ impl AppDelegate {
         let _ = self.ivars().cmd.borrow().send(cmd);
     }
 
+    // ── обновление приложения ──
+
+    /// Титул и доступность пункта «Проверить обновление…».
+    fn set_update_item(&self, title: &str, enabled: bool) {
+        if let Some(item) = self.ivars().check_update_item.borrow().as_ref() {
+            item.setTitle(&NSString::from_str(title));
+            item.setEnabled(enabled);
+        }
+    }
+
+    /// Идёт проверка или загрузка: пункт меню заблокирован.
+    fn update_busy(&self) -> bool {
+        self.ivars()
+            .check_update_item
+            .borrow()
+            .as_ref()
+            .map(|item| !item.isEnabled())
+            .unwrap_or(false)
+    }
+
+    /// Обработать событие потока обновления.
+    fn handle_update(&self, event: UpdateEvent) {
+        match event {
+            UpdateEvent::CheckFinished(Ok(Some(manifest))) => {
+                self.set_update_item("Проверить обновление…", true);
+                let message = format!(
+                    "Доступна версия {} (у вас {}).\n\n\
+                     Установить сейчас? Приложение перезапустится.",
+                    manifest.version,
+                    updater::current_version()
+                );
+                if confirm_alert("QuikLight", &message, "Скачать и установить", "Позже")
+                {
+                    self.set_update_item("Скачивание обновления…", false);
+                    updater::spawn_download(manifest, self.ivars().updater_events.borrow().clone());
+                }
+            }
+            UpdateEvent::CheckFinished(Ok(None)) => {
+                self.set_update_item("Проверить обновление…", true);
+                show_alert(
+                    "QuikLight",
+                    &format!("У вас последняя версия: {}.", updater::current_version()),
+                );
+            }
+            UpdateEvent::CheckFinished(Err(message)) => {
+                self.set_update_item("Проверить обновление…", true);
+                show_alert(
+                    "QuikLight",
+                    &format!("Не удалось проверить обновления.\n\n{message}"),
+                );
+            }
+            UpdateEvent::Progress { received } => {
+                self.set_update_item(
+                    &format!(
+                        "Скачивание обновления… {:.1} МБ",
+                        received as f64 / (1024.0 * 1024.0)
+                    ),
+                    false,
+                );
+            }
+            UpdateEvent::Ready { version, staged } => {
+                self.set_update_item("Проверить обновление…", true);
+                *self.ivars().staged_update.borrow_mut() = Some(staged);
+                let message = format!(
+                    "Обновление {version} скачано и проверено.\n\n\
+                     Перезапустить QuikLight сейчас?"
+                );
+                if confirm_alert("QuikLight", &message, "Перезапустить", "Позже")
+                {
+                    self.install_staged_update();
+                }
+            }
+            UpdateEvent::Failed(message) => {
+                self.set_update_item("Проверить обновление…", true);
+                show_alert(
+                    "QuikLight",
+                    &format!("Не удалось подготовить обновление.\n\n{message}"),
+                );
+            }
+        }
+    }
+
+    /// Подменить бандл скачанным и завершить приложение.
+    fn install_staged_update(&self) {
+        let Some(staged) = self.ivars().staged_update.borrow_mut().take() else {
+            return;
+        };
+        match updater::install_and_relaunch(&staged) {
+            Ok(()) => self.shutdown_and_terminate(),
+            Err(message) => show_alert(
+                "QuikLight",
+                &format!("Не удалось установить обновление.\n\n{message}"),
+            ),
+        }
+    }
+
+    /// Погасить LED (если настроено), дождаться движка и завершить приложение.
+    fn shutdown_and_terminate(&self) {
+        self.send(Command::Quit);
+        // Ждём ack «поток завершился»: он гасит LED (если включена опция).
+        // Ограничено 2 секундами, чтобы не зависнуть при сбое захвата экрана.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while std::time::Instant::now() < deadline {
+            {
+                let events = self.ivars().events.borrow_mut();
+                if events.try_iter().any(|e| matches!(e, WorkerEvent::Exited)) {
+                    break;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        let mtm = MainThreadMarker::new().unwrap();
+        NSApplication::sharedApplication(mtm).terminate(Some(self));
+    }
+
     /// Применить событие от потока.
     fn apply_event(&self, event: WorkerEvent) {
         match event {
@@ -278,6 +405,9 @@ impl AppDelegate {
             }
             WorkerEvent::Error(message) => {
                 show_alert("QuikLight", &message);
+            }
+            WorkerEvent::Update(event) => {
+                self.handle_update(event);
             }
             WorkerEvent::Exited => {
                 // Поток завершился (при выходе) — UI больше ничего не делает.

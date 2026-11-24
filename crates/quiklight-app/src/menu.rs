@@ -156,9 +156,19 @@ impl AppDelegate {
 
         menu.addItem(&NSMenuItem::separatorItem(mtm));
 
-        // Настройки и выход.
+        // Настройки, обновление и выход.
         let settings_item = action_item("Настройки…", 0, sel!(openSettings:), self, mtm);
         menu.addItem(&settings_item);
+
+        let update_item = action_item(
+            "Проверить обновление…",
+            0,
+            sel!(checkForUpdates:),
+            self,
+            mtm,
+        );
+        menu.addItem(&update_item);
+        *self.ivars().check_update_item.borrow_mut() = Some(update_item);
 
         let quit_item = action_item("Выйти", 0, sel!(quit:), self, mtm);
         quit_item.setKeyEquivalent(&NSString::from_str("q"));

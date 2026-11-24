@@ -45,6 +45,7 @@
 | `ui.rs` | AppKit-хелперы: label/слайдер/степпер/чекбокс, кружок цвета, иконка menu bar, алерт |
 | `settings.rs` | `Settings` (Copy) + производные: эффективные LED/раскладка, интервал кадров, конфиг постобработки |
 | `engine.rs` | Фоновый поток: состояние, обработка `Command`, режимы (Off/Static/Effects/Sync/Fireplace), HID-запись, автопереподключение |
+| `updater.rs` | Самообновление: манифест `latest.json` из последнего GitHub-релиза, загрузка через `curl`, проверка sha256/подписи/идентификатора, подмена бандла helper-скриптом после выхода |
 | `effects/fireplace.rs` | Чистая математика «Камина»: высоты LED → цвет пламени → payload |
 
 ## Поток данных
@@ -62,11 +63,16 @@
 ```
 
 - `Command`: `SetPower`, `SetMode`, `SetColor`, `SetBrightness`, `SetSettings`, `Quit`.
-- `WorkerEvent`: `DeviceChanged { connected, info }`, `ModeChanged`, `Error(String)`, `Exited`.
+- `WorkerEvent`: `DeviceChanged { connected, info }`, `ModeChanged`, `Error(String)`,
+  `Update(UpdateEvent)`, `Exited`.
 - Непрерывные режимы тикают по таймауту `recv_timeout`; кадр screen sync —
   `ScreenCapturer` → `ColorExtractor` → `EdgeLayout` → `Device::send_screen_sync`.
 - Выход: по `Command::Quit` движок гасит LED (если включено) и шлёт `Exited`;
   UI ждёт это (максимум 2 с) и завершает приложение.
+- Обновление: пункт меню → поток `updater` (`curl` манифеста и архива, проверки
+  sha256 и `codesign`) → `WorkerEvent::Update` в тот же канал; установка —
+  helper-скрипт, который ждёт выхода PID, подменяет `.app` с откатом при ошибке
+  и перезапускает его. Устройство (HID) в обновлении не участвует.
 
 ## Потоки и производительность
 
@@ -88,8 +94,9 @@
   `engine::Mode`, пункт меню в `menu.rs`.
 - **Новая настройка** — поле в `settings.rs`, контрол в `settings_window.rs`,
   проброс через `Command::SetSettings`.
-
-## Тесты
+, HSV и обновление (сравнение версий, разбор и валидация
+манифеста, синтаксис сгенерированного скрипта установки). Железо не требуется:
+`cargo test --workspace`; ## Тесты
 
 Юнит-тесты inline (`#[cfg(test)] mod tests`) рядом с кодом: протокол (`packet`,
 `actions`), парсер `device_info`, маппинг LED, постобработка цвета, настройки,

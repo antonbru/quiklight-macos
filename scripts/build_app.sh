@@ -37,6 +37,15 @@ if [ "${2:-}" = "--sign" ] && [ -n "${3:-}" ]; then
     IDENTITY="$3"
 fi
 
+# Версия для Info.plist берётся из [workspace.package] Cargo.toml —
+# единый источник истины для приложения и для манифеста обновления.
+VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)"
+if [ -z "$VERSION" ]; then
+    echo "Не удалось прочитать версию из Cargo.toml" >&2
+    exit 1
+fi
+echo "▶ Версия: $VERSION"
+
 echo "▶ Сборка ($PROFILE)..."
 cargo build --workspace $CARGO_ARGS
 
@@ -84,9 +93,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
+    <string>__QUIKLIGHT_VERSION__</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>__QUIKLIGHT_VERSION__</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>LSMinimumSystemVersion</key>
@@ -100,6 +109,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </dict>
 </plist>
 PLIST
+
+# Heredoc выше в кавычках (без подстановки), поэтому версию вписываем после.
+sed -i '' "s/__QUIKLIGHT_VERSION__/$VERSION/g" "$APP/Contents/Info.plist"
 
 if [ "$SKIP_SIGN" = "0" ]; then
     if [ -n "$IDENTITY" ]; then
