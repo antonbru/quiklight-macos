@@ -21,6 +21,7 @@
 
 ```bash
 ./scripts/build_app.sh --release [--sign "Имя"]   # → target/release/QuikLight.app
+./scripts/build_icons.sh                          # иконки menu bar из assets/icons/menubar.svg
 open target/release/QuikLight.app                 # запускать бандл, не сырой бинарник
 ./scripts/release.sh --sign "QuikLight Dev"       # zip + latest.json + GitHub Release
 cargo fmt --all
@@ -49,6 +50,8 @@ cargo run -p quiklight-core --example sync_probe   # проверка SC-кан�
   владельца 51 LED (раскладка 17/29/17).
 - Версия — одна на всё: `[workspace.package]` в `Cargo.toml`; `build_app.sh`
   вписывает её в Info.plist, `release.sh` — в `latest.json`.
+- Иконка menu bar — template (только чёрный + альфа): мастер
+  `assets/icons/menubar.svg`, растры — только через `scripts/build_icons.sh`.
 - Обновление ставится только из `.app`: до подмены проверяются sha256 из
   манифеста, `codesign`, `CFBundleIdentifier` и версия; устройство не трогается.
 - Правка протокола = правка `docs/PROTOCOL.md` + hex-векторов в тестах.

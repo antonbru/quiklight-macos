@@ -49,6 +49,21 @@ open target/release/QuikLight.app
 переживает пересборки). `cargo build --release` можно запускать и отдельно,
 если нужна только проверка компиляции.
 
+### Иконка menu bar
+
+Мастер — вектор `assets/icons/menubar.svg` на сетке 18×18 pt (экран + лампочка,
+только чёрный и прозрачность: template-иконку macOS перекрашивает под тему).
+Растры `menubar@1x/@2x/@3x` (16 pt) и `menubar18@1x/@2x/@3x` (18 pt)
+пересобираются из мастера:
+
+```bash
+./scripts/build_icons.sh          # нужен rsvg-convert: brew install librsvg
+```
+
+Правьте геометрию в SVG, а не PNG. Исходный рисунок пользователя сохранён
+рядом (`assets/icons/menubar-source.png`) — он годится как референс, но
+не как иконка menu bar: на 18 pt его штрихи и искры сливаются.
+
 ## Использование
 
 1. Подключите панель по USB (драйверы не нужны — стандартный HID).
@@ -177,8 +192,9 @@ crates/
 ├── quiklight-core/   # протокол RB/SC, HID-транспорт, захват экрана, цвет
 ├── quiklight-app/    # menu bar приложение (AppKit через objc2)
 └── hidprobe/         # CLI-проверка железа (фаза 0)
-assets/icons/         # иконки приложения и menu bar
-scripts/build_app.sh  # сборка .app-бандла (+ подпись)
+assets/icons/         # иконки приложения и menu bar (мастер menu bar — menubar.svg)
+scripts/              # build_app.sh (сборка .app), build_icons.sh (растр иконок),
+                      # release.sh, create_dev_cert.sh
 docs/                 # документация проекта
 ```
 
