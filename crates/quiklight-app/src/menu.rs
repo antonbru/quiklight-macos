@@ -5,8 +5,8 @@ use objc2::runtime::Sel;
 use objc2::{sel, DefinedClass, MainThreadMarker};
 
 use objc2_app_kit::{
-    NSButton, NSButtonType, NSCellImagePosition, NSControlStateValueOff, NSImageScaling, NSMenu,
-    NSMenuItem, NSSlider, NSSwitch, NSView,
+    NSAutoresizingMaskOptions, NSButton, NSButtonType, NSCellImagePosition, NSControlStateValueOff,
+    NSImageScaling, NSMenu, NSMenuItem, NSSlider, NSSwitch, NSView,
 };
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 
@@ -40,12 +40,6 @@ pub(crate) const PRESET_COLORS: &[(&str, u8, u8, u8)] = &[
 impl AppDelegate {
     pub(crate) fn build_menu(&self, mtm: MainThreadMarker) -> Retained<NSMenu> {
         let menu = NSMenu::new(mtm);
-
-        // Заголовок-статус.
-        let header = NSMenuItem::new(mtm);
-        header.setEnabled(false);
-        menu.addItem(&header);
-        *self.ivars().status_header.borrow_mut() = Some(header);
 
         // Подсветка — переключатель (не пункт меню).
         let switch_item = NSMenuItem::new(mtm);
@@ -138,19 +132,29 @@ impl AppDelegate {
 
         menu.addItem(&NSMenuItem::separatorItem(mtm));
 
-        // Яркость — слайдер внутри пункта меню.
+        // Яркость — слайдер внутри пункта меню во всю ширину.
+        const SLIDER_WIDTH: f64 = 300.0;
+        const SLIDER_PAD: f64 = 8.0;
         let brightness_item = NSMenuItem::new(mtm);
+        let brightness_view = NSView::new(mtm);
+        brightness_view.setFrame(NSRect::new(
+            NSPoint::new(0.0, 0.0),
+            NSSize::new(SLIDER_WIDTH, 30.0),
+        ));
         let slider = NSSlider::new(mtm);
         slider.setFrame(NSRect::new(
-            NSPoint::new(10.0, 6.0),
-            NSSize::new(160.0, 24.0),
+            NSPoint::new(SLIDER_PAD, 3.0),
+            NSSize::new(SLIDER_WIDTH - SLIDER_PAD * 2.0, 24.0),
         ));
+        // Тянется вместе с пунктом меню, если AppKit расширит его до ширины меню.
+        slider.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable);
         slider.setMinValue(0.0);
         slider.setMaxValue(100.0);
         slider.setDoubleValue(f64::from(self.ivars().brightness.get()));
         slider.setContinuous(true);
         control_action(&slider, self, sel!(brightnessChanged:));
-        brightness_item.setView(Some(&slider));
+        brightness_view.addSubview(&slider);
+        brightness_item.setView(Some(&brightness_view));
         *self.ivars().brightness_slider.borrow_mut() = Some(slider);
         menu.addItem(&brightness_item);
 

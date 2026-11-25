@@ -180,25 +180,6 @@ pub(crate) fn checkbox(
     cb
 }
 
-/// Строка статуса для шапки меню.
-pub(crate) fn status_line(
-    connected: bool,
-    info: Option<&quiklight_core::hid::device_info::DeviceInfo>,
-    power: bool,
-) -> String {
-    let state = if power { "вкл" } else { "выкл" };
-    match info {
-        Some(i) => format!(
-            "QuikLight — {} · LED {} · прошивка {}",
-            state,
-            i.led_count,
-            i.firmware_string()
-        ),
-        None if connected => format!("QuikLight — {state} · панель подключена"),
-        None => format!("QuikLight — {state} · панель не найдена"),
-    }
-}
-
 /// Модальный алерт с сообщением.
 pub(crate) fn show_alert(title: &str, message: &str) {
     let mtm = MainThreadMarker::new().unwrap();

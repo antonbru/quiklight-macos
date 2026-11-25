@@ -56,7 +56,6 @@ fn main() {
             device_connected: Cell::new(false),
             device_info: RefCell::new(None),
             status_item: RefCell::new(None),
-            status_header: RefCell::new(None),
             power_switch: RefCell::new(None),
             mode_items: RefCell::new(Vec::new()),
             effects_menu_item: RefCell::new(None),

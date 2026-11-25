@@ -18,7 +18,7 @@ use crate::engine::{Command, Mode, WorkerEvent};
 use crate::menu::{PRESET_COLORS, TAG_EFFECT_FIREPLACE, TAG_MODE_STATIC, TAG_MODE_SYNC};
 use crate::settings::Settings;
 use crate::settings_window::SettingsPanel;
-use crate::ui::{color_circle_image, confirm_alert, show_alert, status_icon, status_line};
+use crate::ui::{color_circle_image, confirm_alert, show_alert, status_icon};
 use crate::updater::{self, UpdateEvent};
 /// Кнопка-кружок пресета палитры: цвет (R, G, B) + кнопка.
 pub(crate) type PresetButton = (u8, u8, u8, Retained<NSButton>);
@@ -41,7 +41,6 @@ pub(crate) struct AppIvars {
 
     // Хэндлы UI (заполняются в `build_ui`).
     pub(crate) status_item: RefCell<Option<Retained<NSStatusItem>>>,
-    pub(crate) status_header: RefCell<Option<Retained<NSMenuItem>>>,
     pub(crate) power_switch: RefCell<Option<Retained<NSSwitch>>>,
     pub(crate) mode_items: RefCell<Vec<(Mode, Retained<NSMenuItem>)>>,
     pub(crate) effects_menu_item: RefCell<Option<Retained<NSMenuItem>>>,
@@ -434,16 +433,6 @@ impl AppDelegate {
                 }
                 button.setAlphaValue(if power { 1.0 } else { 0.35 });
             }
-        }
-
-        // Шапка меню: статус устройства.
-        if let Some(header) = self.ivars().status_header.borrow().clone() {
-            let text = status_line(
-                self.ivars().device_connected.get(),
-                self.ivars().device_info.borrow().as_ref(),
-                power,
-            );
-            header.setTitle(&NSString::from_str(&text));
         }
 
         // Переключатель подсветки.
