@@ -150,7 +150,6 @@ impl AppDelegate {
         slider.setContinuous(true);
         control_action(&slider, self, sel!(brightnessChanged:));
         brightness_item.setView(Some(&slider));
-        *self.ivars().brightness_slider.borrow_mut() = Some(slider);
         menu.addItem(&brightness_item);
 
         menu.addItem(&NSMenuItem::separatorItem(mtm));

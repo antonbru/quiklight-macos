@@ -62,7 +62,7 @@ fn main() {
             effect_items: RefCell::new(Vec::new()),
             fireplace_item: RefCell::new(None),
             preset_items: RefCell::new(Vec::new()),
-            brightness_slider: RefCell::new(None),
+            preset_ring: Cell::new(None),
             settings_panel: RefCell::new(None),
             updater_events: RefCell::new(evt_tx_updater),
             check_update_item: RefCell::new(None),

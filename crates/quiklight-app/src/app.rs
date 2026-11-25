@@ -47,7 +47,8 @@ pub(crate) struct AppIvars {
     pub(crate) effect_items: RefCell<Vec<(u8, u8, Retained<NSMenuItem>)>>,
     pub(crate) fireplace_item: RefCell<Option<Retained<NSMenuItem>>>,
     pub(crate) preset_items: RefCell<Vec<PresetButton>>,
-    pub(crate) brightness_slider: RefCell<Option<Retained<NSSlider>>>,
+    /// Пресет, вокруг которого сейчас нарисовано кольцо (`None` — без кольца).
+    pub(crate) preset_ring: Cell<Option<(u8, u8, u8)>>,
     pub(crate) settings_panel: RefCell<Option<SettingsPanel>>,
 
     // Обновление приложения.
@@ -145,11 +146,14 @@ define_class!(
 
         #[unsafe(method(brightnessChanged:))]
         fn brightness_changed(&self, sender: &AnyObject) {
-            let Some(slider) = sender.downcast_ref::<NSSlider>() else { return };
+            let Some(slider) = sender.downcast_ref::<NSSlider>() else {
+                return;
+            };
             let v = slider.doubleValue().round().clamp(0.0, 100.0) as u8;
             self.ivars().brightness.set(v);
             self.send(Command::SetBrightness(v));
-            self.update_ui();
+            // Меню не обновляем: ползунок уже показывает значение, а перерисовка
+            // пунктов меню прямо во время перетаскивания сбивает tracking слайдера.
         }
 
         // ── окно настроек ──
@@ -486,16 +490,16 @@ impl AppDelegate {
         }
 
         // Палитра: кольцо вокруг текущего пресета (только в режиме статичного цвета).
+        // Картинки перерисовываем только при смене выбранного пресета, чтобы не
+        // трогать пункты открытого меню без нужды.
         let cur = self.ivars().color.get();
-        let preset_active = power && mode == Mode::Static;
-        for (r, g, b, btn) in self.ivars().preset_items.borrow().iter() {
-            let on = preset_active && (*r, *g, *b) == cur;
-            btn.setImage(Some(&color_circle_image(*r, *g, *b, 16.0, on)));
-        }
-
-        // Слайдер яркости.
-        if let Some(slider) = self.ivars().brightness_slider.borrow().clone() {
-            slider.setDoubleValue(f64::from(self.ivars().brightness.get()));
+        let ring = (power && mode == Mode::Static).then_some(cur);
+        if self.ivars().preset_ring.get() != ring {
+            self.ivars().preset_ring.set(ring);
+            for (r, g, b, btn) in self.ivars().preset_items.borrow().iter() {
+                let on = ring == Some((*r, *g, *b));
+                btn.setImage(Some(&color_circle_image(*r, *g, *b, 16.0, on)));
+            }
         }
     }
 
