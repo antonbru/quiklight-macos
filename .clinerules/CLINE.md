@@ -47,7 +47,7 @@ ioreg -p IOUSB -l -w 0 | grep -i -A 6 robobloq
 | Решение | Значение | Почему |
 |---|---|---|
 | Язык | **Rust** (edition 2021, стабильный канал) | Главный референс SyncRGB уже на Rust — переносим протокол и цветообработку почти 1-в-1. Безопасность памяти, нулевой рантайм, лёгкий вес |
-| Целевая macOS | 13.0+ (Ventura) | ScreenCaptureKit требует 12.3+; берём 13+ для современных API |
+| Целевая macOS | 13.0+ (Ventura) | Статичные режимы и эффекты — 13+; screen sync использует `SCScreenshotManager`, который появился в macOS 14, поэтому sync требует 14+ |
 | GUI | **AppKit через крейт `objc2`** (`NSStatusItem` в menu bar, `NSWindow` для настроек) | Нативный GUI без Xcode-проектов: AppKit доступен из Rust через objc2, вес ~10–20 МБ RAM. SwiftUI требует полноценный Xcode, которого у владельца нет |
 | Захват экрана | ScreenCaptureKit через крейт **`objc2-screen-capture-kit`** (`SCScreenshotManager`, macOS 14+) | Периодический захват CGImage проще и надёжнее в objc2, чем `SCStream`; см. Фазу 2 |
 | HID-транспорт | Крейт **`hidapi`** (`hidapi` crate, обёртка над системной IOKit) | Тот же крейт, что использует SyncRGB — проверенный путь |
@@ -62,9 +62,11 @@ ioreg -p IOUSB -l -w 0 | grep -i -A 6 robobloq
 
 - `crates/quiklight-core` — протокол RB/SC, HID-транспорт, захват экрана, цвет;
 - `crates/quiklight-app` — menu bar app (AppKit через `objc2`): `main`, `app`,
-  `menu`, `settings_window`, `ui`, `settings`, `engine`, `effects/fireplace`;
+  `menu`, `settings_window`, `ui`, `settings`, `engine`, `updater`,
+  `effects/fireplace`;
 - `crates/hidprobe` — CLI-проверка железа;
-- `assets/icons`, `scripts/build_app.sh`, `docs/`, `AGENTS.md`.
+- `assets/icons`, `scripts/` (`build_app.sh`, `release.sh`, `create_dev_cert.sh`),
+  `docs/`, `AGENTS.md`.
 
 Юнит-тесты лежат **inline** в модулях (`#[cfg(test)] mod tests`), отдельного каталога `tests/` нет.
 
@@ -109,8 +111,9 @@ ioreg -p IOUSB -l -w 0 | grep -i -A 6 robobloq
 
 ### Фаза 4 — Полировка и дистрибуция (опционально, по запросу владельца)
 - [ ] Автозапуск при входе в систему
-- [x] Сборка `.app`-бандла скриптом, ad-hoc подпись (`codesign --force --deep -s -`)
-- [ ] zip/dmg — не реализованы (в `build_app.sh` только `.app` + `codesign`)
+- [x] Сборка `.app`-бандла скриптом; подпись ad-hoc или постоянным сертификатом (`--sign`)
+- [x] zip-релиз и `latest.json` (`scripts/release.sh`), самообновление из GitHub Releases (проверка вручную)
+- [ ] dmg и нотаризация — не реализованы
 - [x] README с инструкцией установки
 
 ## 5. Правила работы
@@ -140,5 +143,6 @@ ioreg -p IOUSB -l -w 0 | grep -i -A 6 robobloq
 - [x] Весь протокол покрыт юнит-тестами
 - [x] `cargo fmt` и `cargo clippy --workspace --all-targets` без предупреждений
 - [x] Сборка одним скриптом, запуск из меню-бара
+- [x] Обновление из GitHub Releases (`latest.json`, проверка sha256, подписи и версии)
 - [x] README с инструкцией установки
 - [ ] Автозапуск при входе в систему (Фаза 4)
