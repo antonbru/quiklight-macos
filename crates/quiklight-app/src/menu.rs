@@ -133,28 +133,23 @@ impl AppDelegate {
         menu.addItem(&NSMenuItem::separatorItem(mtm));
 
         // Яркость — слайдер внутри пункта меню во всю ширину.
+        // Слайдер должен быть самим view пункта: в контейнере меню перехватывает
+        // перетаскивание, и ползунок не двигается.
         const SLIDER_WIDTH: f64 = 300.0;
-        const SLIDER_PAD: f64 = 8.0;
         let brightness_item = NSMenuItem::new(mtm);
-        let brightness_view = NSView::new(mtm);
-        brightness_view.setFrame(NSRect::new(
-            NSPoint::new(0.0, 0.0),
-            NSSize::new(SLIDER_WIDTH, 30.0),
-        ));
         let slider = NSSlider::new(mtm);
         slider.setFrame(NSRect::new(
-            NSPoint::new(SLIDER_PAD, 3.0),
-            NSSize::new(SLIDER_WIDTH - SLIDER_PAD * 2.0, 24.0),
+            NSPoint::new(0.0, 2.0),
+            NSSize::new(SLIDER_WIDTH, 24.0),
         ));
-        // Тянется вместе с пунктом меню, если AppKit расширит его до ширины меню.
+        // Если AppKit растянет view пункта до ширины меню — тянемся вместе с ним.
         slider.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable);
         slider.setMinValue(0.0);
         slider.setMaxValue(100.0);
         slider.setDoubleValue(f64::from(self.ivars().brightness.get()));
         slider.setContinuous(true);
         control_action(&slider, self, sel!(brightnessChanged:));
-        brightness_view.addSubview(&slider);
-        brightness_item.setView(Some(&brightness_view));
+        brightness_item.setView(Some(&slider));
         *self.ivars().brightness_slider.borrow_mut() = Some(slider);
         menu.addItem(&brightness_item);
 
