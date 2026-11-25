@@ -123,6 +123,9 @@ impl AppDelegate {
         };
         window.setTitle(&NSString::from_str("Настройки QuikLight"));
         window.setContentView(Some(&content));
+        // Окно держим сами в `SettingsPanel`; иначе закрытие крестиком
+        // освобождает его, и повторное открытие падает на висячем указателе.
+        unsafe { window.setReleasedWhenClosed(false) };
 
         SettingsPanel {
             window,
